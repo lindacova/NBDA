@@ -1,10 +1,13 @@
 ---
 title: "Network-based Data Analysis"
 output:
-    html_document:
-      df_print: paged
-      toc: yes
-      theme: yeti
+  github_document:
+    toc: true
+    toc_depth: 2
+    # html_document:
+    #   df_print: paged
+    #   toc: yes
+    #   theme: yeti
 ---
 
 ```{r include=FALSE}
@@ -829,8 +832,8 @@ testNet <- scudoNetwork(testRes, N = 0.2)
 scudoPlot(testNet, vertex.label = NA)
 
 # identify clusters on map
-testClust <- igraph::cluster_spinglass(testNet, spins = 2)
-plot(testClust, testNet, vertex.label = NA)
+# testClust <- igraph::cluster_spinglass(testNet, spins = 2)
+# plot(testClust, testNet, vertex.label = NA)
 ```
 
 
