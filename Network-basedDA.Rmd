@@ -347,10 +347,11 @@ korColData <- as.data.frame(colData(kor))
 table(korColData["sra.experiment_title"])
 
 korTable <- read.csv(file = "korTable.csv", header = 1, stringsAsFactors = TRUE, row.names = 1)
+
+korTable <- korTable[colnames(korData),]
 korTable["a70years"] <- "over"
 korTable$a70years[which(korTable$age < 70)] <- "under"
 korTable$a70years <- as.factor(korTable$a70years)
-korTable <- korTable[order(rownames(korTable)),]
 
 korClean <- korData[which(apply(korData, 1, sum) > 0),]
 dim(korClean)
@@ -428,11 +429,17 @@ my_colors <- c("#2e005d", "#5c008b", "#8e008b", "#ff8300", "#ff6200", "#d1105a",
 
 korClean <- korData[which(apply(korData, 1, sum) > 0),]
 # dim(korClean)
-korClean2 <- log1p(korClean)
+korClean2 <- log1p(korData)
 # boxplot(korClean2)
 korClean3 <- as.data.frame(scale(korClean2))
 boxplot(korClean3, main = "Boxplot of normalized counts", xlab = "Samples", ylab = "Counts",
         xaxt = "n", col = my_colors[7])
+
+# To consider for a possible better filtering:
+# BiocManager::install("genefilter"); library("genefilter");
+# ffun <- filterfun(pOverA(0.20,0.0))
+# t.fil <- genefilter(e.mat,ffun)
+# small.eset <- log2(e.mat[t.fil,]) 
 ```
 
 ```{r pca}
@@ -661,7 +668,7 @@ hcc %<+% tipData +
 
 29/03
 
-## Data clustering: Random Forests
+## Decision trees
 
 __Decision tree learning__ --> supervised method. The tree is a collection of tests: each node is a set, each branch is a feature (a possible answer to the set) and each leaf is a classification. The order of the features in the tree is decided based on entropy: choose the test that brings you clodser to a decision.
 
@@ -721,10 +728,56 @@ __Random forest classifier__: --> Bagging with decorrelated trees.
 * Grow a DT, randomly sampling a few attributes to split on at each internal node
 * Take majority vote using the predictions of the trees for a new query (or take average of predictions)
 
-```{r heatmap}
+```{r forest}
+# The CARET package is used to divide the dataset in training and test set
 
+inTrain <- createDataPartition(korTable$Group, p=0.5)
+inTrain <- rownames(korTable)[inTrain$Resample1]
+
+korTrain <- korClean3[inTrain]
+# dim(korTrain)
+korTest <- korClean3[-which(colnames(korClean3) %in% inTrain)]
+# dim(korTest)
+yTrain <- korTable[inTrain,"Group"]
+yTest <- korTable[-which(colnames(korClean3) %in% inTrain),"Group"]
+```
+
+
+```{r forest2}
+# Build the random forest (Lauria)
+set.seed(1)
+rf <- randomForest(x=t(korTrain), y=yTrain, ntree=200, importance = TRUE)
+# Apply on the test set
+yhat_rf <- predict(rf, t(korTest))
+# Accuracy
+mean(yhat_rf==yTest)
+# Confusion matrix
+table(yhat_rf, yTest)
+
+# Importance
+plot(rf)
+varImpPlot(rf, sort = TRUE, n.var = 15,
+           main = "Importance of feature in random forest classification")
+imp <- as.data.frame(importance(rf))
 
 ```
+
+
+```{r heatmap}
+
+imp25 <- rownames(imp)[order(imp$MeanDecreaseGini, decreasing = TRUE)][seq(1,25)]
+imp25_data <- korClean3[is.element(rownames(korClean3), imp25),]
+
+
+hmcol <- colorRampPalette(brewer.pal(11,"PuOr"))(256)
+colnames(imp25_data) <- korTable$Group # This will label the heatmap columns
+csc <- rep(hmcol[50],30)
+csc[korTable$group=='Tumor'] <- hmcol[200]
+# column side color will be purple for T and orange for B
+heatmap(imp25_data, scale="row", col=hmcol, ColSideColors=csc)
+
+```
+
 
 
 ***
@@ -826,7 +879,8 @@ trainNet <- scudoNetwork(trainRes, N = 0.2)
 scudoPlot(trainNet, vertex.label = NA)
 
 # perform validation using testing samples
-testRes <- scudoTest(trainRes, korTest, korTable[-which(rownames(korTable)%in%inTrain),]$Group,
+testRes <- scudoTest(trainRes, korTest,
+                     korTable[-which(rownames(korTable)%in%inTrain),]$Group,
                      nTop = 25, nBottom = 25)
 testNet <- scudoNetwork(testRes, N = 0.2)
 scudoPlot(testNet, vertex.label = NA)
@@ -836,6 +890,17 @@ scudoPlot(testNet, vertex.label = NA)
 # plot(testClust, testNet, vertex.label = NA)
 ```
 
+***
+# Week 9
 
+26/04
+
+## Functional enrichment analysis
+
+### Gene ontology
+
+This consortium produced three ontologies: the cellular components (CC), molecular functions (MF) and biological processes (BP) ontologies. Ontologies can be considered as some sort of dictionary. The GOs are structured as a hierarchical graph, with the more generic terms at the top and the more specific ones at the bottom. Genes are annotated with a lot of information, divided in levels that are more and more specific of the single gene. Annotations are based on literature and additional inferences computed by the consortium.
+
+Hypergeometric distribution --> for the P-value
 
 
