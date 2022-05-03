@@ -32,6 +32,7 @@ library("ggtree")
 library("rScudo")
 library("caret")
 library("igraph")
+library("RColorBrewer")
 
 set.seed(1)
 ```
@@ -730,6 +731,7 @@ __Random forest classifier__: --> Bagging with decorrelated trees.
 
 ```{r forest}
 # The CARET package is used to divide the dataset in training and test set
+set.seed(1)
 
 inTrain <- createDataPartition(korTable$Group, p=0.5)
 inTrain <- rownames(korTable)[inTrain$Resample1]
@@ -744,9 +746,9 @@ yTest <- korTable[-which(colnames(korClean3) %in% inTrain),"Group"]
 
 
 ```{r forest2}
-# Build the random forest (Lauria)
+# Build the random forest
 set.seed(1)
-rf <- randomForest(x=t(korTrain), y=yTrain, ntree=200, importance = TRUE)
+rf <- randomForest(x=t(korTrain), y=yTrain, ntree=500, importance = TRUE)
 # Apply on the test set
 yhat_rf <- predict(rf, t(korTest))
 # Accuracy
@@ -765,20 +767,28 @@ imp <- as.data.frame(importance(rf))
 
 ```{r heatmap}
 
-imp25 <- rownames(imp)[order(imp$MeanDecreaseGini, decreasing = TRUE)][seq(1,25)]
+imp25 <- rownames(imp)[order(imp$MeanDecreaseGini, decreasing = TRUE)][1:25]
 imp25_data <- korClean3[is.element(rownames(korClean3), imp25),]
 
-
-hmcol <- colorRampPalette(brewer.pal(11,"PuOr"))(256)
-colnames(imp25_data) <- korTable$Group # This will label the heatmap columns
-csc <- rep(hmcol[50],30)
-csc[korTable$group=='Tumor'] <- hmcol[200]
+div <- c("#2e005d", "#662a71", "#945789", "#bc87a5", "#debbc8", 
+        "#fcf1f3", "#ffd2d8", "#ffb2b4", "#ff9486", "#ff7852", "#ff6200")
+# hmcol <- rev(colorRampPalette(brewer.pal(11,"RdBu"))(256))
+hmcol <- viridis(1000, option="magma")
+# colnames(imp25_data) <- korTable$Group # This will label the heatmap columns
+csc <- rep(my_colors[3],ncol(imp25_data))
+csc[korTable$Group=='tumor'] <- my_colors[5]
 # column side color will be purple for T and orange for B
-heatmap(imp25_data, scale="row", col=hmcol, ColSideColors=csc)
+imp25_data <- as.matrix(imp25_data)
+heatmap(imp25_data, scale="row", col=hmcol, ColSideColors=csc,
+        main = "25 most important genes")
+legend(x=0.72, y=1, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
 
 ```
 
 
+```{r}
+
+```
 
 ***
 # Week 6
