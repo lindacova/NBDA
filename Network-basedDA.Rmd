@@ -913,4 +913,28 @@ This consortium produced three ontologies: the cellular components (CC), molecul
 
 Hypergeometric distribution --> for the P-value
 
+***
+
+# Week 10
+
+## Networks theory
+
+***
+
+# Week 11
+
+10/05
+
+## Biological networks
+
+```{r}
+geneList <- rownames(imp)[order(imp$MeanDecreaseGini, decreasing = TRUE)][1:100]
+geneList <- unlist(strsplit(geneList, ".", fixed = TRUE))
+geneList <- geneList[which(startsWith(geneList, "ENS"))]
+# For STRING
+write.table(geneList, "genesList.txt", quote = FALSE, sep = "\n", row.names = FALSE, col.names = FALSE)
+```
+
+
+
 
