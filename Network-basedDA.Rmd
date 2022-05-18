@@ -15,12 +15,11 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 ```
 
 ```{r packages, warning=FALSE, results='hide', message=FALSE}
-
-# library("GEOquery")
-# library("hgu133a.db")
+my_colors <- c("#2e005d", "#5c008b", "#8e008b", "#ff8300", "#ff6200", "#d1105a", "#05a8aa")
 library("recount3")
 library("ggplot2")
 library("factoextra")
+library("DESeq2")
 library("useful")
 library("pheatmap")
 library("viridis")
@@ -33,182 +32,74 @@ library("rScudo")
 library("caret")
 library("igraph")
 library("RColorBrewer")
-
-set.seed(1)
 ```
 
-***
-# Week 1
-
-01/03
-
-
-## Introduction to Omics
-
-Omics data types:
-
-* Genomics
-* Transcriptomics
-* Proteomics
-* Metabolomics
-
-During this course we will focus on transcriptomics, because it is the easiest one.
-
-### Genotype data
-
-Collection of SNPs, which are the most common type of difference between the genome of two human individuals. Data example: a table where each row is an individual and each column is a SNP. Values in the table indicate which variation of the SNP the individual presents.
-
-Approach: dimensionality reduction (For example PCA reduces the dataset to 2 or 3 dimensions)
-Applications: history studies, genealogy studies, forensics, ...
-Another application is genome-wide association studies ( __GWAS__ ). The aim is to find genomic markers of disease through scanning of genetic markers in large enough populations. Not so easy because most of the diseases are caused by variations in multiple different genes. 
-
-### Transcriptomic data
-
-The measure of abundance of RNA transcripts. 
-
-Techniques: __RNA microarrays__ to measure levelsd of mRNA. Now they are being replaced by __RNAseq__. RNAseq needs a little more data processing.
-
-***
-
-03/03
-
-### Proteomics
-
-__Proteome__: set of all proteins produced under a given set of conditions.
-
-Main technologies:
-
-* 2D __gel electrophoresis__ --> separate molecules by size. Can be done with Isoelectric Focusing: separates based on isoelectric pH. The 2D version combines the two separations (molecularweight + electirc charge)
-* Liquid chromatography mass spectrometry ( __LC-MS/MS__ )
-* Chip: __Protein Array__ --> the chip has aptamers: molecules designed to specifically bind a protein.
-
-Proteomics is still relatively limited: problems can remain with purification and stability of proteins
-
-
-### Metabolomics
-
-Metabolite are small molecules in the cell that are the intermediates and products of metabolism. The metabolome is The complete collection of small molecule metabolites in a cell, organ, tissue or organism. It includes endogenous and exogenous molecules as well as transient or even theoretical molecules, it is defined by the detection technology. --> very time-sensitive
-
-Metabolomics uses high-throughput technologies to characterize the metabolome. There are 2 approaches: _quantitative_ (targeted) and _chemometric_ (profiling).
-
-
-### Other high-throughput biological data
-
-__Epigenetic modifications__ --> the study of heritable changes in gene activity that are not caused by changes in the DNA sequence (DNA methylation, histone modifications). 
-
-_Histone modification analysis_: histone purification and isolation, __ChIP__ (Chromatin ImmunoPrecipitation) or other histone analysis. 
-
-__miRNA__ analysis --> isolation of miRNAs from the total RNA, analysis via _microarrays_ or _deep sequencing_.
-
-__Protein-protein interaction (PPI)__ (proteome --> interactome). 
-
-
-### Analytical Goals in Omics Analysis
-
-* Exploratory/discovery analysis
-    + which samples exhibit similar patterns across all variables?
-    + which variables exhibit similar patterns across all samples?
-* Classification/group comparison
-    + which variables are significantly different between pre-defined groups?
-    + Regression analysis
-* Which variables are significantly correlated with a given continuous predictor variable?
-    + Functional annotation of results
-* Which biological functions are altered in our phenotype/challenge of interest?
-
-
-### Clinical study design
-
-* Cell/tissue culture
-    + primary culture
-    + immortalized cell-line
-* Model organism
-    + genetic knockout models
-* Human
-
-
-***
-# Week 2
-
-08/03
-
-
-## High-throughput data: gene expression profiles
-
-### Measuring RNA and Proteins
-
-Proteins:
-
-* Western Blot
-* ELISA
-* Northern blot
-* Enzyme assay
-
-RNA:
-
-* Microarrays
-* RNA-Seq
-* RT-PCR
-
-Microarrays are stil used but RNA-Seq is the most innovative technique.
-
-The amount RNA is not usually linearly correlated with the amount of Protein.
-
-Gene expression != amount of protein
-
-
-### Microarrays
-
-Developed in the early 1990s. After production on a large scale, they became quite affordable. Flexible technology --> can be repurpose to quantify expression levels of miRNAs, SNPs, Proteins and for comparative genome hybridization.
-
-__Basic idea__: RNA --> Reverse transcript to cDNA --> Biotin labelling --> Fragmentation --> Hybridization with the Microarray chip --> Washing and staining --> Scan and Quantitate
-
-Main Microarrays companies: Affymetrics, Illumina
-
-__Possible sources of errors__: sample contamination by molds, poor quality/insuficient mRNA, biases in fluorescent labelling and in the reverse transcription, poor hybridization/cross hybridization, defective/damaged chips. To reduce the chances of cross hybridization, the chips are designed keeping distant the sequences with high risk. Background noise should be excluded. _Normalization_ is often needed to allineate all values.
-
-Other problems of Microarrays:
-
-* Gene not on the chip
-* Cannot usually differentiate splicing variants
-* Quantity could be under detection limit
-* Cannot differentiate RNA synthesis and degradation
-* Can’t tell us about post translational events
-* Bioinformatics can be difficult
-
-__Raw data formats__: _MIAME_, _MAGE-ML_, but different companies have different standards. We are going to use _Bioconductor_: open source software for Bioinformatics. Most Microarrays have their specific bioconductor package to analyze their data. 
-
-__Resources__: Microarray data repositories --> _Array express_, _GEO_ (Gene Expression Omnibus), _Recount2_
-
-
-### RNA-Seq
-
-Whole transcriptome shotgun sequencing. 
-
-Workflow:
-
-* RNA Sequencing
-* Quality Control
-* Mapping
-* Quantification
-* Pre-processing
-* Differential Expression Analysis
-* Functional Analysis
-* Network-Based Enrichment Analysis
-
-A lot of computational power is needed: this process is only possible thanks to powerful computers or online access to server.
+# Dataset selection (week 1)
 
 __Recount__ --> They performed all the steps on dataasets from GEO, starting from the sequencing output. Recount directly provides raw counts: a _count matrix_ (row=genes, columns=samples)
 
-__GEO__ --> some datasets provide counts, others only the raw sequencing data.
-
 Our project starts from count matrices.
 
+Usually control vs test:
 
-### Pre-processing of transcriptomics data
+* Placebo vs Drug treatment
+* Wild-type vs Knockout
+* Healthy vs Patient
+* Normal tissue vs Cancerous tissue
+* Time = 0 vs Time = 1 Time = 2…
 
-Filtering of low expressed genes. 
+Biological replicates --> necessary: independent biological samples
+Technical replicates --> not necessary for us: same samples on different microarrays
 
-Normalization of the count matrix: needed to compare different genes in the same sample or the same gene in different samples. The nuber of reads should be normalized with respect to the length of the gene, otherwse longer genes will for sure have a nigher number of reads associated. 
+Depending on the biological questions, there are various types of knowledge that can be extracted by a set of differentially expressed genes. Possible questions:
+
+__Class discovery__ --> Identify groups of genes having a similar expression profile
+
+__Class Prediction__ --> Find a rule useful for classifying samples. For example for diagnosis based on expression profiles
+
+
+```{r load_dataset warning=FALSE, message=FALSE}
+
+## Recount 3 korean dataset
+
+kor <- recount3::create_rse_manual(
+    project = "SRP133891",
+    project_home = "data_sources/sra",
+    organism = "human",
+    annotation = "gencode_v26",
+    type = "gene",
+    verbose = FALSE
+)
+
+korData <- as.data.frame(assay(kor))
+
+```
+
+```{r explore}
+dim(korData)
+nrow(korData[which(apply(korData, 1, sum) > 0),])  # N. rows with sum > 0
+nrow(korData[which(apply(korData, 1, sum) > 100),])  # N. rows with sum > 100
+nrow(korData[which(apply(korData, 1, sum) > 1000),])  # N. rows with sum > 1000
+
+korColData <- as.data.frame(colData(kor))
+# How many samples per condition
+table(korColData["sra.experiment_title"])
+
+# Check for NAs
+any(is.na(korData))
+
+# Metadata table
+korTable <- read.csv(file = "korTable.csv", header = 1, stringsAsFactors = TRUE, row.names = 1)
+korTable <- korTable[colnames(korData),] # sort korTable rows to be in the same order as korData columns
+```
+
+
+
+# Pre-processing (week 2)
+
+__Filtering__ of low expressed genes. 
+
+__Normalization__ of the count matrix: needed to compare different genes in the same sample or the same gene in different samples. The nuber of reads should be normalized with respect to the length of the transcript, otherwse longer genes will for sure have a nigher number of reads associated. 
 
 __Whithin-sample normalization methods__:
 
@@ -226,210 +117,22 @@ The goal is to identify when the difference between the average counts of two gr
 * TMM: correction for sequencing depth and RNA composition
 * GeTMM: correction for sequencing depth and RNA composition and gene length
 
-For our project we are going to use one of these.
-
-***
-
-10/03
-
-## Dataset selection
-
-Usually control vs test:
-
-* Placebo vs Drug treatment
-* Wild-type vs Knockout
-* Healthy vs Patient
-* Normal tissue vs Cancerous tissue
-* Time = 0 vs Time = 1 Time = 2…
-
-Biological replicates --> necessary: independent biological samples
-Technical replicates --> not necessary for us: same samples on different microarrays
-
-Based on the biological questions, there are various types of knowledge that can be extracted by a set of differentially expressed genes. 
-
-Data comes with proprietary probe IDs (i.e. Affymetrix ID), but there are functions to perform the annotation in terms of standard ID’s (i.e. Entrez)
-
-```{r load_data, warning=FALSE, eval=FALSE, echo=FALSE, include=FALSE}
-
-### GEO dataset - Microarray
-
-geo <- getGEO("GSE63514")
-geo <- geo[[1]]
-
-geoData <- as.data.frame(exprs(geo))
-# head(mat)
-
-# ent <- select(hgu133a.db, df$Aff_ID, c("SYMBOL", "ENTREZID"))
+__Scaling/Log transformation__: normalization to a median of zero by computing the means and subtracting them to the values. Now the boxplots are aligned. Scale normalization is now needed to scale the boxes of the plot, to do this divide the data by the absolute deviation or the mad. In R, this can be done with `scale(x)`. This function automatically does Median centering and Scale normalization. 
 
 
-### Recount3 dataset - RNA Seq
-
-rec <- recount3::create_rse_manual(
-  project = "SRP094795",
-  project_home = "data_sources/sra",
-  organism = "human",
-  annotation = "gencode_v26",
-  type = "gene"
-)
-
-recData <- as.data.frame((assay(rec)))
-
-# Recount3 CRC dataset
-
-crc <- recount3::create_rse_manual(
-    project = "SRP029880",
-    project_home = "data_sources/sra",
-    organism = "human",
-    annotation = "gencode_v26",
-    type = "gene"
-)
-
-crcData <- as.data.frame(assay(crc))
-```
-
-```{r geoData, eval=FALSE, echo=FALSE, include=FALSE}
-
-nrow(geoData)
-nrow(geoData[which(apply(geoData, 1, sum) > 0),]) # N. rows with sum > 0
-nrow(geoData[which(apply(geoData, 1, sum) > 100),]) # N. rows with sum > 100
-nrow(geoData[which(apply(geoData, 1, sum) > 1000),]) # N. rows with sum > 1000
-
-```
-
-```{r recData, eval=FALSE, echo=FALSE, include=FALSE}
-
-nrow(recData)
-nrow(recData[which(apply(recData, 1, sum) > 0),])  # N. rows with sum > 0
-nrow(recData[which(apply(recData, 1, sum) > 100),])  # N. rows with sum > 100
-nrow(recData[which(apply(recData, 1, sum) > 1000),])  # N. rows with sum > 1000
-
-```
-
-```{r crcData, eval=FALSE, echo=FALSE, include=FALSE}
-
-dim(crcData)
-nrow(crcData[which(apply(crcData, 1, sum) > 0),])  # N. rows with sum > 0
-nrow(crcData[which(apply(crcData, 1, sum) > 100),])  # N. rows with sum > 100
-nrow(crcData[which(apply(crcData, 1, sum) > 1000),])  # N. rows with sum > 1000
-
-crcColData <- as.data.frame(colData(crc))
-# colnames(korColData)
-# table(crcColData["sra.experiment_title"])
-
-table(crcColData["sra.sample_attributes"])
-```
-
-***
-```{r warning=FALSE, message=FALSE}
-
-## Recount 3 korean dataset
-
-kor <- recount3::create_rse_manual(
-    project = "SRP133891",
-    project_home = "data_sources/sra",
-    organism = "human",
-    annotation = "gencode_v26",
-    type = "gene"
-)
-
-korData <- as.data.frame(assay(kor))
-
-```
-
-```{r}
-
-dim(korData)
-nrow(korData[which(apply(korData, 1, sum) > 0),])  # N. rows with sum > 0
-nrow(korData[which(apply(korData, 1, sum) > 100),])  # N. rows with sum > 100
-nrow(korData[which(apply(korData, 1, sum) > 1000),])  # N. rows with sum > 1000
-
-korColData <- as.data.frame(colData(kor))
-# colnames(korColData)
-table(korColData["sra.experiment_title"])
-
-korTable <- read.csv(file = "korTable.csv", header = 1, stringsAsFactors = TRUE, row.names = 1)
-
-korTable <- korTable[colnames(korData),]
-korTable["a70years"] <- "over"
-korTable$a70years[which(korTable$age < 70)] <- "under"
-korTable$a70years <- as.factor(korTable$a70years)
-
+```{r filter}
+# Filter low expressed genes:
+# Only keep genes with at least one count in one dataset in korClean
 korClean <- korData[which(apply(korData, 1, sum) > 0),]
 dim(korClean)
 
+boxplot(korClean, main = "Boxplot", xlab = "Samples", ylab = "Counts",
+        xaxt = "n", col = my_colors[7])
 ```
 
 
-***
-# Week 3
-
-15/03
-
-
-## The data analysis process
-
-data: `p x n` matrix. Usually `p >> n`. Choose a number of samples greater than 10 (better 20) but lower than 100 (otherwise computational problems could arise, if the dataset is bigger choose only some conditions).
-
-* p --> number of genes
-* n --> number of samples
-
-Not all genes in the dataset are informative. Some microarrays have mouse genes or other sorts of foreign DNA in order to calibrate or check the quality of the microarray. For this reasons data preprocessing is needed.
-
-Possible questions:
-
-__Class discovery__ --> Identify groups of genes having a similar expression profile
-
-__Class Prediction__ --> Find a rule useful for classifying samples. For example for diagnosis based on expression profiles
-
-Differentially expressed genes can be identified with a __T-test__. Doing a T-test for each gene could cause some problems: multiplicity problems. For this reason, the P-value should be adjusted (Bonferroni or Benjamini-Hochberg correction). The T-test is not ideal for class discovery and prediction but can be used to draw some nice heatmaps or to classify/rank the genes (find the most interesting).
-
-The first thing to do with the dataset is a manual inspection: check if there are too many 0s or NAs and familiarize with the data. Identification of potential probems.
-
-
-## Pre-processing:
-
-### Data normalization
-
-First, visualize with a __boxplot__. 
-
-Possible surces of variations: 
-
-* Systematic --> can be solved with normalization
-* Random --> technical and biological replicates to reduce them
-
-Strategy: a set of genes is used as reference and it is considered not to change across samples and conditions. This could be done adding some known quantities of RNA or by considering housekeeping genes. Many other advanced techniques are possible. 
-
-Our strategy: normalization to a median of zero by computing the means and subtracting them to the values. Now the boxplots are aligned. Scale normalization is now needed to scale the boxes of the plot, to do this divide the data by the absolute deviation or the mad. In R, this can be done with `scale(x)`. This function automatically doea Median centering and Scale normalization. 
-
-If a T-test is needed, it has to be performed on normalized data. 
-
-__MAD__ = Median Absolute Deviation. It is a more robust function for the absolute deviation, useful because of outliers that could bring problems to the standard deviation. Removing the outliers is always controversial because it could generate a bias in the data. Also, there is no clear definition of outlier. To avoid this probem we do not remove the outliers in this stage of analysis. Instead, we ose the _median_ and the _mad_ as robust alternatives for the mean and the standard deviation.
-
-
-### Data transformation
-
-To be performed for a valid reason only! Always check the data first becaus it could be already transformed.
-
-__Log Transformation__ --> To know if it is necessary, look at the boxplot and at the value reached by the data. 
-__Ranks__
-__Z-score__ --> same as scale normalization ??
-
-
-### Principal Component Analysis
-
-It is a method for dimensionality reduction. Thousands of dimensions can be reduced up to 2 or 3 dimensions. The PCA scores show the coordinates with respect to these new dimensions for the samples of the dataset. 
-
-
-
-***
-
-17/03
-
-```{r preprocessing}
-my_colors <- c("#2e005d", "#5c008b", "#8e008b", "#ff8300", "#ff6200", "#d1105a", "#05a8aa")
-
-korClean <- korData[which(apply(korData, 1, sum) > 0),]
-# dim(korClean)
+```{r normalization}
+# Within-sample normalization
 korClean2 <- log1p(korData)
 # boxplot(korClean2)
 korClean3 <- as.data.frame(scale(korClean2))
@@ -442,6 +145,45 @@ boxplot(korClean3, main = "Boxplot of normalized counts", xlab = "Samples", ylab
 # t.fil <- genefilter(e.mat,ffun)
 # small.eset <- log2(e.mat[t.fil,]) 
 ```
+
+
+
+# Differential Expression Analysis (week 3)
+
+Differentially expressed genes can be identified with a _T-test_. Doing a T-test for each gene could cause some problems: multiplicity problems. For this reason, the P-value should be adjusted (Bonferroni or Benjamini-Hochberg correction). The T-test is not ideal for class discovery and prediction but can be used to draw some nice heatmaps or to classify/rank the genes (find the most interesting). If a T-test is needed, it has to be performed on normalized data. 
+
+```{r DEanalysis}
+# DESeq2 requires the raw counts matrix (korData)
+# and the dataset of the "coldata" (korTable)
+# all(colnames(korData)==rownames(korTable)) # to check that names are in the right order
+
+dds <- DESeqDataSetFromMatrix(countData = korClean,
+                              colData = korTable,
+                              design = ~ Group)
+dds
+# boxplot(assay(dds), main = "Boxplot of normalized counts", xlab = "Samples", ylab = "Counts",
+#         xaxt = "n", col = my_colors[7])
+
+vsd <- vst(dds, blind = FALSE)
+# boxplot(assay(vsd), main = "Boxplot of normalized counts", xlab = "Samples", ylab = "Counts",
+#         xaxt = "n", col = my_colors[7])
+
+dds <- DESeq(vsd)
+
+```
+
+
+# Principal Component Analysis (week 3)
+
+It is a method for dimensionality reduction. Thousands of dimensions can be reduced up to 2 or 3 dimensions. The PCA scores show the coordinates with respect to these new dimensions for the samples of the dataset. 
+
+
+
+***
+
+17/03
+
+
 
 ```{r pca}
 
