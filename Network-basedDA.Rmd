@@ -1,9 +1,10 @@
 ---
-title: "Network-based Data Analysis"
+title: "Network-based Data Analysis Project"
 output:
   github_document:
     toc: true
     toc_depth: 2
+    # theme: yeti
     # html_document:
     #   df_print: paged
     #   toc: yes
@@ -18,51 +19,35 @@ knitr::opts_chunk$set(message = FALSE, warning = FALSE)
 my_colors <- c("#2e005d", "#5c008b", "#8e008b", "#ff8300", "#ff6200", "#d1105a", "#05a8aa")
 library("recount3")
 library("ggplot2")
+library("edgeR")
+library("tidyverse")
 library("factoextra")
-library("DESeq2")
-library("useful")
-library("pheatmap")
-library("viridis")
-library("ALL")
-library("genefilter")
-library("randomForest")
-library("glmnet")
 library("ggtree")
-library("rScudo")
+library("randomForest")
 library("caret")
-library("igraph")
-library("RColorBrewer")
+library("pROC")
+library("genefilter")
+library("glmnet")
+library("rScudo")
+library("viridis")
+library("gprofiler2")
+library("pathfindR")
+library("org.Hs.eg.db")
+library("clusterProfiler")
 ```
 
 # Dataset selection (week 1)
 
-__Recount__ --> They performed all the steps on dataasets from GEO, starting from the sequencing output. Recount directly provides raw counts: a _count matrix_ (row=genes, columns=samples)
+The dataset contains gene expression data of 63856 genes (rows) from 68 patients (columns). Half of the patients are diagnosed with gastric cancer, while the other half is tumor-free. Some data is available albout the sex and age of the patients.
 
-Our project starts from count matrices.
-
-Usually control vs test:
-
-* Placebo vs Drug treatment
-* Wild-type vs Knockout
-* Healthy vs Patient
-* Normal tissue vs Cancerous tissue
-* Time = 0 vs Time = 1 Time = 2…
-
-Biological replicates --> necessary: independent biological samples
-Technical replicates --> not necessary for us: same samples on different microarrays
-
-Depending on the biological questions, there are various types of knowledge that can be extracted by a set of differentially expressed genes. Possible questions:
-
-__Class discovery__ --> Identify groups of genes having a similar expression profile
-
-__Class Prediction__ --> Find a rule useful for classifying samples. For example for diagnosis based on expression profiles
+The dataset has been retrieved from the _Recount_ database: it directly provides a _count matrix_ containing raw counts of gene expression obtained from sequencing data (Illumina HiSeq 2500 in this case).
 
 
-```{r load_dataset warning=FALSE, message=FALSE}
+```{r load_dataset, warning=FALSE, message=FALSE}
 
-## Recount 3 korean dataset
+## Fetch the dataset from recount
 
-kor <- recount3::create_rse_manual(
+recount_data <- recount3::create_rse_manual(
     project = "SRP133891",
     project_home = "data_sources/sra",
     organism = "human",
@@ -71,104 +56,99 @@ kor <- recount3::create_rse_manual(
     verbose = FALSE
 )
 
-korData <- as.data.frame(assay(kor))
+full_data <- as.data.frame(assay(recount_data))
 
+
+## Write a csv with the dataset for quick offline access
+# write.csv(korData, file = "dataset.csv")
+# full_data <- read.csv("dataset.csv", row.names=1)
 ```
 
-```{r explore}
-dim(korData)
-nrow(korData[which(apply(korData, 1, sum) > 0),])  # N. rows with sum > 0
-nrow(korData[which(apply(korData, 1, sum) > 100),])  # N. rows with sum > 100
-nrow(korData[which(apply(korData, 1, sum) > 1000),])  # N. rows with sum > 1000
+Some data exploratory analysis:
 
-korColData <- as.data.frame(colData(kor))
+```{r explore}
+dim(full_data)
+nrow(full_data[which(apply(full_data, 1, sum) > 0),])  # N. rows with sum > 0
+nrow(full_data[which(apply(full_data, 1, sum) > 100),])  # N. rows with sum > 100
+nrow(full_data[which(apply(full_data, 1, sum) > 1000),])  # N. rows with sum > 1000
+
+col_data <- as.data.frame(colData(recount_data))
+
 # How many samples per condition
-table(korColData["sra.experiment_title"])
+table(col_data["sra.experiment_title"])
 
 # Check for NAs
-any(is.na(korData))
+any(is.na(full_data))
+```
 
-# Metadata table
-korTable <- read.csv(file = "korTable.csv", header = 1, stringsAsFactors = TRUE, row.names = 1)
-korTable <- korTable[colnames(korData),] # sort korTable rows to be in the same order as korData columns
+The metadata table is available ![online](https://www.refine.bio/experiments/SRP133891/discovery-korean-specific-gastric-cancer-genes-and-targeted-cancer-drugs) 
+
+```{r metadata}
+## Metadata table
+info_samples <- read.csv(file = "korTable.csv", header = 1, stringsAsFactors = TRUE, row.names = 1)
+# sort korTable rows to be in the same order as full_data columns
+info_samples <- info_samples[colnames(full_data),] 
 ```
 
 
 
 # Pre-processing (week 2)
 
-__Filtering__ of low expressed genes. 
+## Filtering
 
-__Normalization__ of the count matrix: needed to compare different genes in the same sample or the same gene in different samples. The nuber of reads should be normalized with respect to the length of the transcript, otherwse longer genes will for sure have a nigher number of reads associated. 
+Genes that show very low expression in all the samples are filtered out of the dataset.
 
-__Whithin-sample normalization methods__:
-
-Used for comparisons between samples of the same group.
-
-* RPM/CPM: reads/counts per million mapped reads --> correction for sequencing depth
-* RPKM/FPKM: correction for sequencing depth and gene length
-* TPM: transcripts per million --> correction for sequencing depth and gene length
-
-__Between-sample normalization methods__:
-
-The goal is to identify when the difference between the average counts of two groups is significantly different ( _Differential Expression Analysis_ ). Used when we want to compare gene expression between different samples. The method is a Ttest, uses the standard deviation. 
-
-* DeSeq2: correction for sequencing depth and RNA composition
-* TMM: correction for sequencing depth and RNA composition
-* GeTMM: correction for sequencing depth and RNA composition and gene length
-
-__Scaling/Log transformation__: normalization to a median of zero by computing the means and subtracting them to the values. Now the boxplots are aligned. Scale normalization is now needed to scale the boxes of the plot, to do this divide the data by the absolute deviation or the mad. In R, this can be done with `scale(x)`. This function automatically does Median centering and Scale normalization. 
-
-
-```{r filter}
+```{r filtering}
 # Filter low expressed genes:
-# Only keep genes with at least one count in one dataset in korClean
-korClean <- korData[which(apply(korData, 1, sum) > 0),]
-dim(korClean)
+# Only keep genes with at least a total of 10 counts
+filter_data <- full_data[which(apply(full_data, 1, sum) > 10),]
+dim(filter_data)
 
-boxplot(korClean, main = "Boxplot", xlab = "Samples", ylab = "Counts",
-        xaxt = "n", col = my_colors[7])
+# boxplot(filter_data, main = "Boxplot", xlab = "Samples", ylab = "Counts",
+#         xaxt = "n", col = my_colors[7])
 ```
 
+## Normalization
+
+The normalization is performed with _geTMM_: which allows for both inter- and intrasample analyses with the same normalized data set. geTMM performs correction for sequencing depth and RNA composition and gene length.
 
 ```{r normalization}
-# Within-sample normalization
-korClean2 <- log1p(korData)
-# boxplot(korClean2)
-korClean3 <- as.data.frame(scale(korClean2))
-boxplot(korClean3, main = "Boxplot of normalized counts", xlab = "Samples", ylab = "Counts",
-        xaxt = "n", col = my_colors[7])
+## Get lengths of genes
 
-# To consider for a possible better filtering:
-# BiocManager::install("genefilter"); library("genefilter");
-# ffun <- filterfun(pOverA(0.20,0.0))
-# t.fil <- genefilter(e.mat,ffun)
-# small.eset <- log2(e.mat[t.fil,]) 
+info_genes <- as.data.frame(rowData(recount_data))
+# colnames(info_genes)
+info_genes <- info_genes %>%
+  select(gene_name, gene_id, bp_length, gene_type)
+
+info_genes <- info_genes[which(info_genes$gene_id %in% rownames(filter_data)),]
+
+## Calculate RPK (reads assigned per killobase) for each gene
+
+rpk <- filter_data*(10^3)/info_genes$bp_length
+
+## Normalize
+
+rpk <- DGEList(counts = rpk, group = rep("something", ncol(rpk)))
+rpk <- calcNormFactors(rpk)
+norm_data <- as.data.frame(cpm(rpk))
+
+## Boxplot
+
+boxplot(norm_data, main = "Boxplot of normalized counts (per million)", xlab = "Samples", ylab = "Counts",
+        xaxt = "n", col = my_colors[7], ylim=c(0,5000), outcex=0.8)
 ```
 
+The boxplot shows that scaling is necesary: in this case the data needs a log scaling.
 
 
-# Differential Expression Analysis (week 3)
+```{r scaling}
+## Log-scaling of data
+clean_data <- log2(norm_data+0.1)
 
-Differentially expressed genes can be identified with a _T-test_. Doing a T-test for each gene could cause some problems: multiplicity problems. For this reason, the P-value should be adjusted (Bonferroni or Benjamini-Hochberg correction). The T-test is not ideal for class discovery and prediction but can be used to draw some nice heatmaps or to classify/rank the genes (find the most interesting). If a T-test is needed, it has to be performed on normalized data. 
+## Boxplot
 
-```{r DEanalysis}
-# DESeq2 requires the raw counts matrix (korData)
-# and the dataset of the "coldata" (korTable)
-# all(colnames(korData)==rownames(korTable)) # to check that names are in the right order
-
-dds <- DESeqDataSetFromMatrix(countData = korClean,
-                              colData = korTable,
-                              design = ~ Group)
-dds
-# boxplot(assay(dds), main = "Boxplot of normalized counts", xlab = "Samples", ylab = "Counts",
-#         xaxt = "n", col = my_colors[7])
-
-vsd <- vst(dds, blind = FALSE)
-# boxplot(assay(vsd), main = "Boxplot of normalized counts", xlab = "Samples", ylab = "Counts",
-#         xaxt = "n", col = my_colors[7])
-
-dds <- DESeq(vsd)
+boxplot(clean_data, main = "Boxplot of scaled counts", xlab = "samples", ylab = "normalized counts",
+        xaxt = "n", col = my_colors[7], outcex=0.5)
 
 ```
 
@@ -177,17 +157,9 @@ dds <- DESeq(vsd)
 
 It is a method for dimensionality reduction. Thousands of dimensions can be reduced up to 2 or 3 dimensions. The PCA scores show the coordinates with respect to these new dimensions for the samples of the dataset. 
 
-
-
-***
-
-17/03
-
-
-
 ```{r pca}
 
-pca <- prcomp(t(korClean3))
+pca <- prcomp(t(clean_data))
 
 # summary(pca)
 # screeplot(pca)
@@ -212,7 +184,7 @@ p
 
 ## PC 1 and 2
 
-pc12 <- merge(pca$x[,c(1,2)], korTable, by="row.names")
+pc12 <- merge(pca$x[,c(1,2)], info_samples, by="row.names")
 
 p <- ggplot(pc12, aes(x=PC1, y=PC2, shape=Sex, color=Group)) +
   geom_point(size = 3)+
@@ -223,7 +195,7 @@ p
 
 ## Pc 2 and 3
 
-pc23 <- merge(pca$x[,c(2,3)], korTable, by="row.names")
+pc23 <- merge(pca$x[,c(2,3)], info_samples, by="row.names")
 
 p <- ggplot(pc23, aes(x=PC2, y=PC3, shape=Sex, color=Group)) +
   geom_point(size = 3)+
@@ -234,7 +206,7 @@ p
 
 ## PC 1 and 3
 
-pc13 <- merge(pca$x[,c(1,3)], korTable, by="row.names")
+pc13 <- merge(pca$x[,c(1,3)], info_samples, by="row.names")
 
 p <- ggplot(pc13, aes(x=PC1, y=PC3, shape=Sex, color=Group)) +
   geom_point(size = 3)+
@@ -270,100 +242,21 @@ p
 ```
 
 
-***
-# Week 4
+# Data Clustering (week 4)
 
-22/03
+## K-means
 
-## Classification methods
+Unsupervised method, simple and quick to understand and implement. It relies on the tuning parameter K (number of resulting clusters) and is sensitive to outliers, not an advanced methods, to be used for a first exploratory analysis.
 
-* Unsupervised approaches: k-means, hierarchical clustering, ...
-* Supervised approaches: linear and quadratic discriminants, KNN, decision trees, neural networks, support vector machines, ...
-
-The best method must be evaluated depending on the data.
-
-__Machine learning__ is the study of methods that can learn from and make predictions on data.
-
-
-### Unsupervised learning
-
-The data have no target attribute. Unsupervidsed learning algorithms are aimed at __data clustering__.
-
-Main aspect of clustering:
-
-* The algorithm (partitional, hierarchical, ...)
-* The distance function
-* The clustering quality (inter-cluster distance maximized/minimized)
-
-What is a __outlier__: Tukey's criterion. 
-
-`IQR = Q3 - Q1`
-
-Below this threshold: `Q1 - 1.5*IQR`
-
-Above this threshold: `Q3 + 1.5*IQR`
-
-Distances can be computed in a number of ways. One example is the __Euclidean distance__ --> the most inutuitive way to compute distance: with the pythagorean theorem. Another one is the __Manhattan distance__. 
-
-Distances between clusters:
-* Simple linkage --> distance between the two closest points in the clusters
-* Average linkage (usually the default option)
-* Complete linkage --> the two most distant points in the clusters
-
-### K-means
-
-1. Randomly choose _k_ data points (k = number of clusters) to be the initial _centroids_. The number of clusters must be decided by the user, in some cases an algorithm is needed for this, in other we could know it in advance for some reason.
-2. Assign each data point to the closest centroid
-3. Re-compute the centroids using the current cluster membership.
-4. Repeat from point 2 until convergence is reached. (e.g. until centroids remain the same for a couple of repetitions)
-
-
-Strengths of K-means:
-* Simple to understand and implement
-* Efficient: time complexity = O(tkn) 
-*
-*
-
-Limitations of K-means
-* K must be chosen, not always convenient.
-* Numerical datasets are better because it relies on a numerical distance.
-* Greatly affected by outliers: they shift the position of the centroid.
-* Sensitive to the initial seeds.
-* Only works with clusters with simple shapes, such as ellipsoids of some kind.
-
-
-### Hierarchical clustering
-
-It produces a __Dendrogram__. Compute a distance matrix and cluster together the points with the lower distance. Then recompute the distance matrix considering the new cluster as one point and continue. There is a finite number of steps. In the end, decide where to cut the tree to have the preferred number of clusters --> the number of clusters is decided at the end.
-
-
-***
-
-24/03
+K-means is computed setting K=2, since we know there are two groups of patients (normal and tumor).
+The results are plotted with a pca for a better visualization.
 
 ```{r k-means}
 
-## 4 clusters
+## Compute K-means clusters
 
-km <- kmeans(t(korClean3), 4)
-# table(km$cluster)
-
-km2plot <- data.frame("Row.names" = names(km$cluster),
-                      "Cluster" = as.factor(km$cluster))
-km2plot <- merge(km2plot, pc12, by="Row.names")
-
-p <- ggplot(km2plot, aes(x=PC1, y=PC2, color=Cluster, shape=Group)) +
-  geom_point(size = 3)+
-  scale_shape_manual(values = c(0,15))+
-  scale_color_manual(values = my_colors[c(2,4,6,7)])+
-  ggtitle("K-means results - 4 clusters")
-  
-p
-
-
-## 2 clusters
-
-km2 <- kmeans(t(korClean3), 2)
+K=2
+km2 <- kmeans(t(clean_data), K)
 # table(km$cluster)
 
 km2plot <- data.frame("Row.names" = names(km2$cluster),
@@ -378,21 +271,56 @@ p <- ggplot(km2plot, aes(x=PC1, y=PC2, color=Cluster, shape=Group)) +
   
 p
 
+rm(km2plot)
+
+```
+
+```{r Kmeans2}
+## Create list with the predictions
+pred_k <- km2$cluster
+pred_k[which(pred_k==1)] <- "tumor"
+pred_k[which(pred_k==2)] <- "normal"
+pred_k <- factor(pred_k,levels = c("normal", "tumor"))
+
+## Accuracy
+acc_k <- mean(pred_k==info_samples$Group)
+
+## AUC from ROC curve
+roc_k <- roc(as.numeric(pred_k), as.numeric(info_samples$Group))
+# plot(roc_rf)
+auc_k <- auc(roc_k)
+```
+
+```{r df}
+## Crete dataframe to store the accuracy results
+res_df <- data.frame(Kmeans = c(acc_k, auc_k))
+rownames(res_df) <- c("accuracy", "AUC")
 ```
 
 
-```{r hierarchical}
+## Hierarchical clustering
 
-dist_matrix <- dist(t(korClean3), method = "euclidean")
+It produces a dendrogram: at each step a distance matrix is computed and the points with the lower distance are clustered together, then the distance matrix is recomputed considering the new cluster as one point. In the end, the tree is cut to have the chosen number of clusters.
+
+For this clustering method, distance between samples and between clusters must be computed. In this case, sample distances are computed with the _Euclidean_ method, and the cluster distances with _average linkage_.
+
+```{r hierarchical}
+## Distance matrix
+dist_matrix <- dist(t(clean_data), method = "euclidean")
+## Clustering
 hc <- hclust(dist_matrix, method ="average")
 hc$height <- hc$height-80
-hclusters <- cutree(hc, k = 7)
-hclusters <- hclusters[order(names(hclusters))]
-tipData <- data.frame(samples=rownames(korTable),
-                      group=korTable$Group,
-                      sex=korTable$Sex)
 
-# hc <- ggtree(hc)
+## Cut the tree, in this case the best division is obtained by cutting the tree after 4 divisions.
+## K=6 because the tree is divided in 6 clusters, the first 5 are grouped together as cluster 0.
+hclusters <- cutree(hc, k = 6)
+
+## Plot the tree
+hclusters <- hclusters[order(names(hclusters))]
+tipData <- data.frame(samples=rownames(info_samples),
+                      group=info_samples$Group,
+                      sex=info_samples$Sex)
+
 hcc <- groupOTU(.data = ggtree(hc), group_name = "cluster", .node = names(hclusters)[which(hclusters==1) ])+
   aes(linetype=cluster)
 
@@ -401,282 +329,403 @@ hcc %<+% tipData +
   geom_tippoint(aes(color=group, shape=sex), size=2.3) +
   scale_color_manual(values = my_colors[c(3,5)]) +
   ggtitle("Hierarchical clustering")
-  # geom_tiplab(angle=90, hjust=-0.5, offset=-10, show.legend=FALSE, size=2.8)
 
 ```
 
+```{r hierarchical2}
+## Create list with the predictions
+pred_h <- hclusters
+pred_h[which(hclusters==1)] <- "normal"
+pred_h[which(hclusters!=1)] <- "tumor"
+pred_h <- factor(pred_h,levels = c("normal", "tumor"))
 
-***
-# Week 5
+## Accuracy
+acc_h <- mean(pred_h==info_samples$Group)
 
-29/03
+## AUC from ROC curve
+roc_h <- roc(as.numeric(pred_h), as.numeric(info_samples$Group))
+# plot(roc_rf)
+auc_h <- auc(roc_h)
 
-## Decision trees
 
-__Decision tree learning__ --> supervised method. The tree is a collection of tests: each node is a set, each branch is a feature (a possible answer to the set) and each leaf is a classification. The order of the features in the tree is decided based on entropy: choose the test that brings you clodser to a decision.
+## Update results table
+res_df["Hierarchical"] <- c(acc_h, auc_h)
+```
 
-When building the tree, the best attribute for each test are chosen with the concept of entropy: compute the gain and choose the possibility that allows to reach the higher information gain. The root attribute is also chosen this way.
 
-Problem: overfitting. Increasing the number of levels, the quality of the training data goes up but the accuracy of the predicion on the test data does not.
+# Random Forests (week 5)
 
-To avoid overfitting:
+From now on, the classification methods are supervised methods. For this purpose, the data is divided in a training and a test set.
 
-* Prepruning --> stop growing the tree when you think there is enough data to make reliable choices.
-* Postpruning --> grow the whole tree and eliminate the nodes that do not have sufficient evidence (most popular)
-
-Other methods are possible (es: cross-validation)
-
-With numerical (continuous) values --> the easiest thing to do is to use a threshold to discretize the numerical data. 
-
-Attributes with many values are a situation that can causes problems, because the gain is going to select it. With a great number of possible values, it is likely that this variable will discriminate well on a small sample. Entropy appreaches the max value. Use _GainRatio_ instead of just _Gain_.
-
-Unknown attribute values --> If node n does not have attribute A: if n tests A, assign to it the most common value of A among the other nodes.
-
-__Gini index__: can be interpreted as expected error rate.
-
-Advantages of decision trees:
-
-* Very fast
-* Flexible
-* interpretability: it easy to understand the process that led the algorithm to that output
-
-Disadvatages:
-
-* Instability: there is high variance
-* Not always competitive with other algorithms in terms of accuracy
-
-__Ensemble learning__ --> Generate a group of base-learners which when combined have higher accuracy.
-
-Each learner uses different:
-
-* Algorithms
-* Parameters
-* Representations (Modalities)
-* Training sets
-* Subproblems
-
-Ensamble learning decides classification based on majority voting (??).
-
-__Bootstrap__ --> randomly draw datasets with replacement from the training data, each sample the same size as the original training set.
-
-__Bagging__ --> Bootstrap + Aggregation (voting):
-
-* Take K bootstrap samples (with replacement)
-* Train K different classifiers on these bootstrap samples
-* For a new query, let all classifiers make a prediction and take an average (or majority vote)
-
-__Random forest classifier__: --> Bagging with decorrelated trees.
-
-* Draw K bootstrap samples of a fixed size
-* Grow a DT, randomly sampling a few attributes to split on at each internal node
-* Take majority vote using the predictions of the trees for a new query (or take average of predictions)
-
-```{r forest}
+```{r data_split}
 # The CARET package is used to divide the dataset in training and test set
 set.seed(1)
 
-inTrain <- createDataPartition(korTable$Group, p=0.5)
-inTrain <- rownames(korTable)[inTrain$Resample1]
+train_ind <- createDataPartition(info_samples$Group, p = 0.7)$Resample1
 
-korTrain <- korClean3[inTrain]
-# dim(korTrain)
-korTest <- korClean3[-which(colnames(korClean3) %in% inTrain)]
-# dim(korTest)
-yTrain <- korTable[inTrain,"Group"]
-yTest <- korTable[-which(colnames(korClean3) %in% inTrain),"Group"]
+train_data <- clean_data[train_ind]
+# dim(train_data)
+test_data <- clean_data[-train_ind]
+# dim(test_data)
+yTrain <- info_samples[train_ind,"Group"]
+yTest <- info_samples[-train_ind,"Group"]
 ```
 
 
-```{r forest2}
-# Build the random forest
+Random forest requires the tuning of 2 parameters: _ntree_ and the _mtry_. The first is the number of trees to grow and the second is the number of features (genes) considered when building each tree. The best parameters are chosen comparing OOB errors of random forests fitted with different values of the two parameters.
+
+```{r n_trees}
 set.seed(1)
-rf <- randomForest(x=t(korTrain), y=yTrain, ntree=500, importance = TRUE)
-# Apply on the test set
-yhat_rf <- predict(rf, t(korTest))
-# Accuracy
-mean(yhat_rf==yTest)
-# Confusion matrix
-table(yhat_rf, yTest)
 
-# Importance
+## Fit a first random forest to determine the best number of trees 
+rf <- randomForest(t(train_data), y = yTrain)
 plot(rf)
-varImpPlot(rf, sort = TRUE, n.var = 15,
-           main = "Importance of feature in random forest classification")
-imp <- as.data.frame(importance(rf))
 
+ntree <- 200
+```
+
+The first plot shows that a plateau in the OOB error is reached with a number of trees around 200.
+
+
+```{r mtry}
+
+control <- trainControl(method='cv', 
+                        search='grid')
+#create tunegrid with 15 values from 1:15 for mtry to tunning model. Our train function will change number of entry variable at each split according to tunegrid. 
+mtry <- sqrt(nrow(train_data))
+tunegrid <- expand.grid(mtry = seq(mtry-50, mtry+50, by = 10)) 
+
+rf_gridsearch <- train(x=t(train_data), y=yTrain,
+                       method = 'rf',
+                       ntree=200,
+                       metric = 'Accuracy',
+                       tuneGrid = tunegrid,
+                       trControl = control)
+# print(rf_gridsearch)
+
+mtry <- rf_gridsearch$bestTune$mtry
+```
+
+The best mtry results to be 251.2747. Next, a model is built on the training set with these parameters and evaluated on the test set.
+
+```{r rf}
+set.seed(1)
+
+tunegrid <- expand.grid(.mtry=c(mtry))
+rf <- train(x=t(train_data), y=yTrain,
+             method = 'rf',
+             ntree=200,
+             metric = 'Accuracy',
+             tuneGrid = tunegrid,
+             trControl = control)
+# print(rf)
 ```
 
 
-```{r heatmap}
 
-imp25 <- rownames(imp)[order(imp$MeanDecreaseGini, decreasing = TRUE)][1:25]
-imp25_data <- korClean3[is.element(rownames(korClean3), imp25),]
+```{r rf_pred}
+set.seed(1)
 
-div <- c("#2e005d", "#662a71", "#945789", "#bc87a5", "#debbc8", 
-        "#fcf1f3", "#ffd2d8", "#ffb2b4", "#ff9486", "#ff7852", "#ff6200")
-# hmcol <- rev(colorRampPalette(brewer.pal(11,"RdBu"))(256))
-hmcol <- viridis(1000, option="magma")
-# colnames(imp25_data) <- korTable$Group # This will label the heatmap columns
-csc <- rep(my_colors[3],ncol(imp25_data))
-csc[korTable$Group=='tumor'] <- my_colors[5]
-# column side color will be purple for T and orange for B
-imp25_data <- as.matrix(imp25_data)
-heatmap(imp25_data, scale="row", col=hmcol, ColSideColors=csc,
-        main = "25 most important genes")
-legend(x=0.72, y=1, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
+## Apply it on the test set
+pred_rf <- predict(rf, t(clean_data))
 
+## Accuracy
+acc_rf <- mean(pred_rf==info_samples$Group)
+## Confusion matrix
+# table(pred_rf, yTest)
+
+## AUC from ROC curve
+# roc_rf <- roc(yTrain, rf$votes[,2])
+prob_rf <- predict(rf, t(test_data), type = "prob")
+roc_rf <- roc(yTest, prob_rf$normal)
+# plot(roc_rf)
+auc_rf <- auc(roc_rf)
+
+## Update df
+res_df["RandomForest"] <- c(acc_rf, auc_rf)
 ```
 
 
-```{r}
-
-```
-
-***
-# Week 6
-
-05/04
-
-## Linear Methods?
-
-Useful information:
-
-* Between-class distance --> between the centroids of different classes
-* Within-class distance --> accumulated distance from the instances to centroid of the class
-
-### Linear Discriminant Analysis
+# Linear Discriminant Analysis (week 6)
 
 The idea of LDA is to reduce dimensionality while preserving the ability to discriminate. The samples are projected on a line. Choose the line that maximizes the separation of the points.
 
-Find the mathematical centroid: it is the sample mean (mu). 
-mu~ means ??? --> projection of the points on the line?
-s~2 is the sum of the distances of the projections to the center of the separation line ???
+In order to perform an lda, a feature selection is necessary to reduce the number of genes considered. In this case, it is dove with a ttest.
 
-### Performance evaluation of classifiers
+```{r tt}
+## T test
+tt <- rowttests(as.matrix(clean_data), info_samples$Group)
+tt <- which(p.adjust(tt$p.value)<0.1)
 
-Confusion matrix
-
-
-***
-# Week 7
-
-14/04
-
-## Lasso and Ridge
-
-```{r lasso}
-
-# Library "glmnet" is popular to do LASSO regression.
-
+## Reduce the original dataset
+tt_data <- clean_data[tt,]
+# dim(tt_data)
+tt_train <- tt_data[train_ind]
+# dim(tt_train)
 ```
 
 
+Fit an lda model with a 10-fold cross-validation and evaluate the model.
 
-***
-# Week 8
+```{r lda}
+set.seed(1)
 
-21/04
+## Fit the model with cv
+control <- trainControl(method="cv", number=10)
+lda_fit <- train(t(tt_train), yTrain, method="lda", 
+                 metric="Accuracy", trControl=control)
+# print(lda_fit)
 
-## Scudo
+## Apply it on the test set
+pred_lda <- predict(lda_fit, t(test_data))
+
+## Accuracy
+acc_lda <- mean(pred_lda==yTest)
+
+## AUC from ROC curve
+roc_lda <- roc(as.numeric(pred_lda), as.numeric(yTest))
+# plot(roc_rf)
+auc_lda <- auc(roc_lda)
+
+
+## Update results table
+res_df["LDA"] <- c(acc_lda, auc_lda)
+```
+
+
+# Lasso and Ridge regression (week 7)
+
+```{r lasso}
+set.seed(1)
+
+## fit Lasso with cv
+control <- trainControl(method="cv", number=10)
+tunegrid <- expand.grid(alpha=1,
+                        lambda=seq(0,1,by=0.05))
+lasso_fit <- train(t(train_data), yTrain, method="glmnet", family="binomial", 
+                 tuneGrid = tunegrid,
+                 metric="Accuracy", trControl=control)
+# print(lasso_fit)
+
+## Apply it on the test set
+pred_lasso <- predict(lasso_fit, t(test_data))
+
+## Accuracy
+acc_lasso <- mean(pred_lasso==yTest)
+
+## AUC from ROC curve
+roc_lasso <- roc(as.numeric(pred_lasso), as.numeric(yTest))
+# plot(roc_rf)
+auc_lasso <- auc(roc_lasso)
+
+
+## Update results table
+res_df["Lasso"] <- c(acc_lasso, auc_lasso)
+
+```
+
+# Scudo (week 8)
 
 The goal of this method is to avoid batch effects and obtain a method that is repeatable and reproducible.
 
 This method compares signatures of different individuals. Each signature is sorted for the expression value. The most important genes for each signature are the most and the less expressed. Then signatures are compared and a map is constructed, where clusters can be seen if they are colsely connected.
 
-Closely connected samples = similar signatures
-
-The idea of ranking makes the method robust to expression variations across samples
-
-Distance measure: similar to GSEA --> the signature (short) is compared to a long ranked list of genes. A running sum is computed and plotted. From the plot it is possible to see where the peak falls: to which part of the long list the signature looks like (?).
-
-Parameters:
-
-* n1 = n2 (usually equal number) --> most and less expressed genes
-* N --> percentage of similarity needed to draw an edge between two samples
-
-Supervised version: performes a feature selection before computing the connectivity scores. A new parameter is introduced:
-
-* p --> p-value threshold to consider a feature
-
-Possible improvements:
-
-* better distance calculation method
-* ...
-
 
 ```{r scudo}
+## Apply SCUDO on the training set
 
-# The CARET package is used to divide the dataset in training and test set
-
-inTrain <- createDataPartition(korTable$Group, p=0.75)
-inTrain <- rownames(korTable)[inTrain$Resample1]
-
-korTrain <- korClean3[inTrain]
-# dim(korTrain)
-korTest <- korClean3[-which(colnames(korClean3) %in% inTrain)]
-# dim(korTest)
-
-# Apply the SCUDO on the training set
-
-trainRes <- scudoTrain(korTrain, groups = korTable[inTrain,]$Group,
-                       nTop = 25, nBottom = 25, alpha = 0.05)
-trainRes
+scudo_train <- scudoTrain(train_data, groups = yTrain,
+                          nTop = 25, nBottom = 25, alpha = 0.05)
+scudo_train
 
 # inspect signatures 
 # upSignatures(trainRes)
 # consensusUpSignatures(trainRes)
 
-# generate and plot map of training samples
-trainNet <- scudoNetwork(trainRes, N = 0.2)
-scudoPlot(trainNet, vertex.label = NA)
+## perform validation using testing samples
+scudo_test <- scudoTest(scudo_train, test_data, yTest,
+                        nTop = 25, nBottom = 25)
 
-# perform validation using testing samples
-testRes <- scudoTest(trainRes, korTest,
-                     korTable[-which(rownames(korTable)%in%inTrain),]$Group,
-                     nTop = 25, nBottom = 25)
-testNet <- scudoNetwork(testRes, N = 0.2)
+## Plot the results
+testNet <- scudoNetwork(scudo_test, N = 0.2)
 scudoPlot(testNet, vertex.label = NA)
 
-# identify clusters on map
-# testClust <- igraph::cluster_spinglass(testNet, spins = 2)
-# plot(testClust, testNet, vertex.label = NA)
-```
+## Classification
+pred_scudo <- scudoClassify(train_data, test_data,
+                            nTop = 25, nBottom = 25, N = 0.2,
+                            trainGroups = yTrain,
+                            featureSel = FALSE)
+## Accuracy
+acc_scudo <- mean(pred_scudo$predicted==yTest)
 
-***
-# Week 9
+## AUC from ROC curve
+roc_scudo <- roc(yTest, pred_scudo$scores[,2])
+# plot(roc_rf)
+auc_scudo <- auc(roc_scudo)
 
-26/04
 
-## Functional enrichment analysis
-
-### Gene ontology
-
-This consortium produced three ontologies: the cellular components (CC), molecular functions (MF) and biological processes (BP) ontologies. Ontologies can be considered as some sort of dictionary. The GOs are structured as a hierarchical graph, with the more generic terms at the top and the more specific ones at the bottom. Genes are annotated with a lot of information, divided in levels that are more and more specific of the single gene. Annotations are based on literature and additional inferences computed by the consortium.
-
-Hypergeometric distribution --> for the P-value
-
-***
-
-# Week 10
-
-## Networks theory
-
-***
-
-# Week 11
-
-10/05
-
-## Biological networks
-
-```{r}
-geneList <- rownames(imp)[order(imp$MeanDecreaseGini, decreasing = TRUE)][1:100]
-geneList <- unlist(strsplit(geneList, ".", fixed = TRUE))
-geneList <- geneList[which(startsWith(geneList, "ENS"))]
-# For STRING
-write.table(geneList, "genesList.txt", quote = FALSE, sep = "\n", row.names = FALSE, col.names = FALSE)
+## Update results table
+res_df["Scudo"] <- c(acc_scudo, auc_scudo)
 ```
 
 
+# Models comparison
 
+The models fitted before are compared by accuracy and AUC. The random forest appears to be the best performing model according to both the metrics.
+
+```{r res}
+
+res_plot <- data.frame(Model = rep(colnames(res_df),2),
+                       Metric = rep(c("Accuracy", "AUC"), each=ncol(res_df)),
+                       Value=c(as.numeric(res_df[1,]), as.numeric(res_df[2,])))
+res_plot
+
+
+ggplot(res_plot, aes(x=Model, y=Value, fill=Metric))+
+  geom_bar(stat="identity", position="dodge", width=0.5)+
+  scale_fill_manual(values = c(my_colors[c(4,6)]))+
+  ggtitle("Models evaluation")
+
+```
+
+
+# Feature selection
+
+Since random forest was selected as the best performing model, a feature selection was performed considering the importance score assigned to each gene when fitting the random forest. The following genes are the most relevant ones for the classification of the samples according to the random forest algorithm.
+
+```{r rf_importance}
+# Importance
+imp <- varImp(rf)
+imp <- imp$importance
+imp["gene"] <- rownames(imp)
+colnames(imp) <- c("importance", "gene")
+imp <- imp[order(imp$importance, decreasing = TRUE),]
+rownames(imp) <- seq(1:nrow(imp))
+geneList <- unlist(strsplit(imp$gene, ".", fixed = TRUE))
+imp$gene_clean <- geneList[which(startsWith(geneList, "ENS"))]
+
+head(imp)
+```
+
+
+```{r heatmap}
+imp25 <- imp$gene[1:25]
+imp25_data <- clean_data[is.element(rownames(clean_data), imp25),]
+
+div <- c("#2e005d", "#662a71", "#945789", "#bc87a5", "#debbc8", 
+        "#fcf1f3", "#ffd2d8", "#ffb2b4", "#ff9486", "#ff7852", "#ff6200")
+# hmcol <- rev(colorRampPalette(brewer.pal(11,"RdBu"))(256))
+hmcol <- viridis(1000, option="mako")
+# colnames(imp25_data) <- korTable$Group # This will label the heatmap columns
+csc <- rep(my_colors[3],ncol(imp25_data))
+csc[info_samples$Group=='tumor'] <- my_colors[5]
+# column side color will be purple for T and orange for B
+imp25_data <- as.matrix(imp25_data)
+heatmap(imp25_data, scale="row", col=hmcol, ColSideColors=csc,
+        # main = "25 most important genes", 
+        labCol = FALSE)
+legend(x=0.72, y=1, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
+
+```
+
+
+# Functional enrichment analysis (week 9)
+
+The functional enrichment analysis is performed with _gprofiler2_, with the objective of finding out the molecular functions more represented among the most important genes. For this purpose, the 200 genes with highest importance score according to the random forest model fitted before are considered.
+
+
+```{r functional}
+
+geneList <- imp$gene_clean[1:200]
+
+gost_res <- gost(query = geneList,
+                organism = "hsapiens", 
+                ordered_query = FALSE, multi_query = FALSE, significant = FALSE, 
+                exclude_iea = FALSE, measure_underrepresentation = FALSE, evcodes = FALSE,
+                user_threshold = 0.05, correction_method = "g_SCS",
+                domain_scope = "annotated", custom_bg = NULL, numeric_ns = "", 
+                sources = NULL, as_short_link = FALSE)
+
+gost_df <- gost_res$result[c("term_id", "term_name", "p_value", "significant")]
+gost_df <- gost_df[order(gost_df$p_value),]
+gost_df <- gost_df[which(gost_df$significant==TRUE),]
+
+# head(gost_df)
+
+# visualize results using a Manhattan plot
+p <- gostplot(gost_res, capped = TRUE, interactive = FALSE)
+publish_gostplot(p, filename = NULL)
+
+publish_gosttable(gost_res, highlight_terms = gost_df$term_id[1:10],
+                  use_colors = TRUE, filename = NULL,
+                  show_columns = c("source","term_id", "term_name", "p_value"))
+
+```
+
+
+
+# Biological networks (week 10)
+
+The network analysis is performed with _pathfindR_, using the _KEGG_, _Gene Ontology_ and _Reactome_ databases. For this analysis, the 100 genes with the lowest p value obtained with a t test are taken into consideration. This list of genes has 23 genes in common with the one of the most important genes used for the functional enrichment.
+
+```{r tt2}
+## T test
+tt <- rowttests(as.matrix(clean_data), info_samples$Group)
+tt <- tt[order(tt$p.value),]
+
+geneList_tt <- data.frame(ENSEMBL = rownames(tt)[1:100],
+                          p.value = tt$p.value[1:100])
+                          # p.adjust = p.adjust(tt$p.value[1:100]))
+
+a <- unlist(strsplit(geneList_tt$ENSEMBL, ".", fixed = TRUE))
+geneList_tt$ENSEMBL <- a[which(startsWith(a, "ENS"))]
+a <- bitr(geneList_tt$ENSEMBL, 
+          fromType = "ENSEMBL",
+          toType = "SYMBOL",
+          OrgDb = org.Hs.eg.db)
+
+geneList_tt <- merge(a,geneList_tt)
+rm(a)
+
+# dim(geneList_tt)
+```
+
+
+```{r net}
+net_KEGG <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
+                          iterations = 1, # keeps running time low - default is 10
+                          gene_sets = "KEGG", 
+                          visualize_enriched_terms = FALSE,
+                          # output_dir = NULL,
+                          silent_option = FALSE)
+
+# ## cluster enriched terms
+# patR_clu <- cluster_enriched_terms(patR_res)
+# ## term-gene graph of top 10 terms
+# term_gene_graph(patR_res)
+
+net_GO <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
+                          iterations = 1, # keeps running time low - default is 10
+                          gene_sets = "GO-All", 
+                          visualize_enriched_terms = FALSE,
+                          # output_dir = NULL,
+                          silent_option = FALSE)
+
+net_Reactome <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
+                          iterations = 1, # keeps running time low - default is 10
+                          gene_sets = "Reactome", 
+                          visualize_enriched_terms = FALSE,
+                          # output_dir = NULL,
+                          silent_option = FALSE)
+```
+
+```{r net_plot}
+enrichment_chart(net_KEGG)
+enrichment_chart(net_GO)
+enrichment_chart(net_Reactome)
+```
+
+```{r reactome}
+term_gene_graph(net_Reactome, num_terms = 7, use_description = TRUE)
+```
 

@@ -1,360 +1,110 @@
-Network-based Data Analysis
+Network-based Data Analysis Project
 ================
 
-  - [Week 1](#week-1)
-      - [Introduction to Omics](#introduction-to-omics)
-  - [Week 2](#week-2)
-      - [High-throughput data: gene expression
-        profiles](#high-throughput-data-gene-expression-profiles)
-      - [Dataset selection](#dataset-selection)
-  - [Week 3](#week-3)
-      - [The data analysis process](#the-data-analysis-process)
-      - [Pre-processing:](#pre-processing)
-  - [Week 4](#week-4)
-      - [Classification methods](#classification-methods)
-  - [Week 5](#week-5)
-      - [Data clustering: Random
-        Forests](#data-clustering-random-forests)
-  - [Week 6](#week-6)
-      - [Linear Methods?](#linear-methods)
-  - [Week 7](#week-7)
-      - [Lasso and Ridge](#lasso-and-ridge)
-  - [Week 8](#week-8)
-      - [Scudo](#scudo)
+  - [Dataset selection (week 1)](#dataset-selection-week-1)
+  - [Pre-processing (week 2)](#pre-processing-week-2)
+      - [Filtering](#filtering)
+      - [Normalization](#normalization)
+  - [Principal Component Analysis (week
+    3)](#principal-component-analysis-week-3)
+  - [Data Clustering (week 4)](#data-clustering-week-4)
+      - [K-means](#k-means)
+      - [Hierarchical clustering](#hierarchical-clustering)
+  - [Random Forests (week 5)](#random-forests-week-5)
+  - [Linear Discriminant Analysis (week
+    6)](#linear-discriminant-analysis-week-6)
+  - [Lasso and Ridge regression (week
+    7)](#lasso-and-ridge-regression-week-7)
+  - [Scudo (week 8)](#scudo-week-8)
+  - [Models comparison](#models-comparison)
+  - [Feature selection](#feature-selection)
+  - [Functional enrichment analysis (week
+    9)](#functional-enrichment-analysis-week-9)
+  - [Biological networks (week 10)](#biological-networks-week-10)
 
 ``` r
-# library("GEOquery")
-# library("hgu133a.db")
+my_colors <- c("#2e005d", "#5c008b", "#8e008b", "#ff8300", "#ff6200", "#d1105a", "#05a8aa")
 library("recount3")
 library("ggplot2")
+library("edgeR")
+library("tidyverse")
 library("factoextra")
-library("useful")
-library("pheatmap")
-library("viridis")
-library("ALL")
-library("genefilter")
-library("randomForest")
-library("glmnet")
 library("ggtree")
-library("rScudo")
+library("randomForest")
 library("caret")
-library("igraph")
-
-set.seed(1)
+library("pROC")
+library("genefilter")
+library("glmnet")
+library("rScudo")
+library("viridis")
+library("gprofiler2")
+library("pathfindR")
+library("org.Hs.eg.db")
+library("clusterProfiler")
 ```
 
------
-
-# Week 1
-
-01/03
-
-## Introduction to Omics
-
-Omics data types:
-
-  - Genomics
-  - Transcriptomics
-  - Proteomics
-  - Metabolomics
-
-During this course we will focus on transcriptomics, because it is the
-easiest one.
-
-### Genotype data
-
-Collection of SNPs, which are the most common type of difference between
-the genome of two human individuals. Data example: a table where each
-row is an individual and each column is a SNP. Values in the table
-indicate which variation of the SNP the individual presents.
-
-Approach: dimensionality reduction (For example PCA reduces the dataset
-to 2 or 3 dimensions) Applications: history studies, genealogy studies,
-forensics, … Another application is genome-wide association studies (
-**GWAS** ). The aim is to find genomic markers of disease through
-scanning of genetic markers in large enough populations. Not so easy
-because most of the diseases are caused by variations in multiple
-different genes.
-
-### Transcriptomic data
-
-The measure of abundance of RNA transcripts.
-
-Techniques: **RNA microarrays** to measure levelsd of mRNA. Now they are
-being replaced by **RNAseq**. RNAseq needs a little more data
-processing.
-
------
-
-03/03
-
-### Proteomics
-
-**Proteome**: set of all proteins produced under a given set of
-conditions.
-
-Main technologies:
-
-  - 2D **gel electrophoresis** –\> separate molecules by size. Can be
-    done with Isoelectric Focusing: separates based on isoelectric pH.
-    The 2D version combines the two separations (molecularweight +
-    electirc charge)
-  - Liquid chromatography mass spectrometry ( **LC-MS/MS** )
-  - Chip: **Protein Array** –\> the chip has aptamers: molecules
-    designed to specifically bind a protein.
-
-Proteomics is still relatively limited: problems can remain with
-purification and stability of proteins
-
-### Metabolomics
-
-Metabolite are small molecules in the cell that are the intermediates
-and products of metabolism. The metabolome is The complete collection of
-small molecule metabolites in a cell, organ, tissue or organism. It
-includes endogenous and exogenous molecules as well as transient or even
-theoretical molecules, it is defined by the detection technology. –\>
-very time-sensitive
-
-Metabolomics uses high-throughput technologies to characterize the
-metabolome. There are 2 approaches: *quantitative* (targeted) and
-*chemometric* (profiling).
-
-### Other high-throughput biological data
-
-**Epigenetic modifications** –\> the study of heritable changes in gene
-activity that are not caused by changes in the DNA sequence (DNA
-methylation, histone modifications).
-
-*Histone modification analysis*: histone purification and isolation,
-**ChIP** (Chromatin ImmunoPrecipitation) or other histone analysis.
-
-**miRNA** analysis –\> isolation of miRNAs from the total RNA, analysis
-via *microarrays* or *deep sequencing*.
-
-**Protein-protein interaction (PPI)** (proteome –\> interactome).
-
-### Analytical Goals in Omics Analysis
-
-  - Exploratory/discovery analysis
-      - which samples exhibit similar patterns across all variables?
-      - which variables exhibit similar patterns across all samples?
-  - Classification/group comparison
-      - which variables are significantly different between pre-defined
-        groups?
-      - Regression analysis
-  - Which variables are significantly correlated with a given continuous
-    predictor variable?
-      - Functional annotation of results
-  - Which biological functions are altered in our phenotype/challenge of
-    interest?
-
-### Clinical study design
-
-  - Cell/tissue culture
-      - primary culture
-      - immortalized cell-line
-  - Model organism
-      - genetic knockout models
-  - Human
-
------
-
-# Week 2
-
-08/03
-
-## High-throughput data: gene expression profiles
-
-### Measuring RNA and Proteins
-
-Proteins:
-
-  - Western Blot
-  - ELISA
-  - Northern blot
-  - Enzyme assay
-
-RNA:
-
-  - Microarrays
-  - RNA-Seq
-  - RT-PCR
-
-Microarrays are stil used but RNA-Seq is the most innovative technique.
-
-The amount RNA is not usually linearly correlated with the amount of
-Protein.
-
-Gene expression \!= amount of protein
-
-### Microarrays
-
-Developed in the early 1990s. After production on a large scale, they
-became quite affordable. Flexible technology –\> can be repurpose to
-quantify expression levels of miRNAs, SNPs, Proteins and for comparative
-genome hybridization.
-
-**Basic idea**: RNA –\> Reverse transcript to cDNA –\> Biotin labelling
-–\> Fragmentation –\> Hybridization with the Microarray chip –\>
-Washing and staining –\> Scan and Quantitate
-
-Main Microarrays companies: Affymetrics, Illumina
-
-**Possible sources of errors**: sample contamination by molds, poor
-quality/insuficient mRNA, biases in fluorescent labelling and in the
-reverse transcription, poor hybridization/cross hybridization,
-defective/damaged chips. To reduce the chances of cross hybridization,
-the chips are designed keeping distant the sequences with high risk.
-Background noise should be excluded. *Normalization* is often needed to
-allineate all values.
-
-Other problems of Microarrays:
-
-  - Gene not on the chip
-  - Cannot usually differentiate splicing variants
-  - Quantity could be under detection limit
-  - Cannot differentiate RNA synthesis and degradation
-  - Can’t tell us about post translational events
-  - Bioinformatics can be difficult
-
-**Raw data formats**: *MIAME*, *MAGE-ML*, but different companies have
-different standards. We are going to use *Bioconductor*: open source
-software for Bioinformatics. Most Microarrays have their specific
-bioconductor package to analyze their data.
-
-**Resources**: Microarray data repositories –\> *Array express*, *GEO*
-(Gene Expression Omnibus), *Recount2*
-
-### RNA-Seq
-
-Whole transcriptome shotgun sequencing.
-
-Workflow:
-
-  - RNA Sequencing
-  - Quality Control
-  - Mapping
-  - Quantification
-  - Pre-processing
-  - Differential Expression Analysis
-  - Functional Analysis
-  - Network-Based Enrichment Analysis
-
-A lot of computational power is needed: this process is only possible
-thanks to powerful computers or online access to server.
-
-**Recount** –\> They performed all the steps on dataasets from GEO,
-starting from the sequencing output. Recount directly provides raw
-counts: a *count matrix* (row=genes, columns=samples)
-
-**GEO** –\> some datasets provide counts, others only the raw sequencing
-data.
-
-Our project starts from count matrices.
-
-### Pre-processing of transcriptomics data
-
-Filtering of low expressed genes.
-
-Normalization of the count matrix: needed to compare different genes in
-the same sample or the same gene in different samples. The nuber of
-reads should be normalized with respect to the length of the gene,
-otherwse longer genes will for sure have a nigher number of reads
-associated.
-
-**Whithin-sample normalization methods**:
-
-Used for comparisons between samples of the same group.
-
-  - RPM/CPM: reads/counts per million mapped reads –\> correction for
-    sequencing depth
-  - RPKM/FPKM: correction for sequencing depth and gene length
-  - TPM: transcripts per million –\> correction for sequencing depth and
-    gene length
-
-**Between-sample normalization methods**:
-
-The goal is to identify when the difference between the average counts
-of two groups is significantly different ( *Differential Expression
-Analysis* ). Used when we want to compare gene expression between
-different samples. The method is a Ttest, uses the standard deviation.
-
-  - DeSeq2: correction for sequencing depth and RNA composition
-  - TMM: correction for sequencing depth and RNA composition
-  - GeTMM: correction for sequencing depth and RNA composition and gene
-    length
-
-For our project we are going to use one of these.
-
------
-
-10/03
-
-## Dataset selection
-
-Usually control vs test:
-
-  - Placebo vs Drug treatment
-  - Wild-type vs Knockout
-  - Healthy vs Patient
-  - Normal tissue vs Cancerous tissue
-  - Time = 0 vs Time = 1 Time = 2…
-
-Biological replicates –\> necessary: independent biological samples
-Technical replicates –\> not necessary for us: same samples on different
-microarrays
-
-Based on the biological questions, there are various types of knowledge
-that can be extracted by a set of differentially expressed genes.
-
-Data comes with proprietary probe IDs (i.e. Affymetrix ID), but there
-are functions to perform the annotation in terms of standard ID’s
-(i.e. Entrez)
-
------
+# Dataset selection (week 1)
+
+The dataset contains gene expression data of 63856 genes (rows) from 68
+patients (columns). Half of the patients are diagnosed with gastric
+cancer, while the other half is tumor-free. Some data is available
+albout the sex and age of the patients.
+
+The dataset has been retrieved from the *Recount* database: it directly
+provides a *count matrix* containing raw counts of gene expression
+obtained from sequencing data (Illumina HiSeq 2500 in this case).
 
 ``` r
-## Recount 3 korean dataset
+## Fetch the dataset from recount
 
-kor <- recount3::create_rse_manual(
+recount_data <- recount3::create_rse_manual(
     project = "SRP133891",
     project_home = "data_sources/sra",
     organism = "human",
     annotation = "gencode_v26",
-    type = "gene"
+    type = "gene",
+    verbose = FALSE
 )
 
-korData <- as.data.frame(assay(kor))
+full_data <- as.data.frame(assay(recount_data))
+
+
+## Write a csv with the dataset for quick offline access
+# write.csv(korData, file = "dataset.csv")
+# full_data <- read.csv("dataset.csv", row.names=1)
 ```
 
+Some data exploratory analysis:
+
 ``` r
-dim(korData)
+dim(full_data)
 ```
 
     ## [1] 63856    68
 
 ``` r
-nrow(korData[which(apply(korData, 1, sum) > 0),])  # N. rows with sum > 0
+nrow(full_data[which(apply(full_data, 1, sum) > 0),])  # N. rows with sum > 0
 ```
 
     ## [1] 53629
 
 ``` r
-nrow(korData[which(apply(korData, 1, sum) > 100),])  # N. rows with sum > 100
+nrow(full_data[which(apply(full_data, 1, sum) > 100),])  # N. rows with sum > 100
 ```
 
     ## [1] 52262
 
 ``` r
-nrow(korData[which(apply(korData, 1, sum) > 1000),])  # N. rows with sum > 1000
+nrow(full_data[which(apply(full_data, 1, sum) > 1000),])  # N. rows with sum > 1000
 ```
 
     ## [1] 45299
 
 ``` r
-korColData <- as.data.frame(colData(kor))
-# colnames(korColData)
-table(korColData["sra.experiment_title"])
+col_data <- as.data.frame(colData(recount_data))
+
+# How many samples per condition
+table(col_data["sra.experiment_title"])
 ```
 
     ## 
@@ -364,127 +114,101 @@ table(korColData["sra.experiment_title"])
     ##                                              34
 
 ``` r
-korTable <- read.csv(file = "korTable.csv", header = 1, stringsAsFactors = TRUE, row.names = 1)
-korTable["a70years"] <- "over"
-korTable$a70years[which(korTable$age < 70)] <- "under"
-korTable$a70years <- as.factor(korTable$a70years)
-korTable <- korTable[order(rownames(korTable)),]
-
-korClean <- korData[which(apply(korData, 1, sum) > 0),]
-dim(korClean)
+# Check for NAs
+any(is.na(full_data))
 ```
 
-    ## [1] 53629    68
+    ## [1] FALSE
 
------
+The metadata table is available
+![online](https://www.refine.bio/experiments/SRP133891/discovery-korean-specific-gastric-cancer-genes-and-targeted-cancer-drugs)
 
-# Week 3
+``` r
+## Metadata table
+info_samples <- read.csv(file = "korTable.csv", header = 1, stringsAsFactors = TRUE, row.names = 1)
+# sort korTable rows to be in the same order as full_data columns
+info_samples <- info_samples[colnames(full_data),] 
+```
 
-15/03
+# Pre-processing (week 2)
 
-## The data analysis process
+## Filtering
 
-data: `p x n` matrix. Usually `p >> n`. Choose a number of samples
-greater than 10 (better 20) but lower than 100 (otherwise computational
-problems could arise, if the dataset is bigger choose only some
-conditions).
+Genes that show very low expression in all the samples are filtered out
+of the dataset.
 
-  - p –\> number of genes
-  - n –\> number of samples
+``` r
+# Filter low expressed genes:
+# Only keep genes with at least a total of 10 counts
+filter_data <- full_data[which(apply(full_data, 1, sum) > 10),]
+dim(filter_data)
+```
 
-Not all genes in the dataset are informative. Some microarrays have
-mouse genes or other sorts of foreign DNA in order to calibrate or check
-the quality of the microarray. For this reasons data preprocessing is
-needed.
+    ## [1] 53488    68
 
-Possible questions:
+``` r
+# boxplot(filter_data, main = "Boxplot", xlab = "Samples", ylab = "Counts",
+#         xaxt = "n", col = my_colors[7])
+```
 
-**Class discovery** –\> Identify groups of genes having a similar
-expression profile
+## Normalization
 
-**Class Prediction** –\> Find a rule useful for classifying samples. For
-example for diagnosis based on expression profiles
+The normalization is performed with *geTMM*: which allows for both
+inter- and intrasample analyses with the same normalized data set. geTMM
+performs correction for sequencing depth and RNA composition and gene
+length.
 
-Differentially expressed genes can be identified with a **T-test**.
-Doing a T-test for each gene could cause some problems: multiplicity
-problems. For this reason, the P-value should be adjusted (Bonferroni or
-Benjamini-Hochberg correction). The T-test is not ideal for class
-discovery and prediction but can be used to draw some nice heatmaps or
-to classify/rank the genes (find the most interesting).
+``` r
+## Get lengths of genes
 
-The first thing to do with the dataset is a manual inspection: check if
-there are too many 0s or NAs and familiarize with the data.
-Identification of potential probems.
+info_genes <- as.data.frame(rowData(recount_data))
+# colnames(info_genes)
+info_genes <- info_genes %>%
+  select(gene_name, gene_id, bp_length, gene_type)
 
-## Pre-processing:
+info_genes <- info_genes[which(info_genes$gene_id %in% rownames(filter_data)),]
 
-### Data normalization
+## Calculate RPK (reads assigned per killobase) for each gene
 
-First, visualize with a **boxplot**.
+rpk <- filter_data*(10^3)/info_genes$bp_length
 
-Possible surces of variations:
+## Normalize
 
-  - Systematic –\> can be solved with normalization
-  - Random –\> technical and biological replicates to reduce them
+rpk <- DGEList(counts = rpk, group = rep("something", ncol(rpk)))
+rpk <- calcNormFactors(rpk)
+norm_data <- as.data.frame(cpm(rpk))
 
-Strategy: a set of genes is used as reference and it is considered not
-to change across samples and conditions. This could be done adding some
-known quantities of RNA or by considering housekeeping genes. Many other
-advanced techniques are possible.
+## Boxplot
 
-Our strategy: normalization to a median of zero by computing the means
-and subtracting them to the values. Now the boxplots are aligned. Scale
-normalization is now needed to scale the boxes of the plot, to do this
-divide the data by the absolute deviation or the mad. In R, this can be
-done with `scale(x)`. This function automatically doea Median centering
-and Scale normalization.
+boxplot(norm_data, main = "Boxplot of normalized counts (per million)", xlab = "Samples", ylab = "Counts",
+        xaxt = "n", col = my_colors[7], ylim=c(0,5000), outcex=0.8)
+```
 
-If a T-test is needed, it has to be performed on normalized data.
+![](Network-basedDA_files/figure-gfm/normalization-1.png)<!-- -->
 
-**MAD** = Median Absolute Deviation. It is a more robust function for
-the absolute deviation, useful because of outliers that could bring
-problems to the standard deviation. Removing the outliers is always
-controversial because it could generate a bias in the data. Also, there
-is no clear definition of outlier. To avoid this probem we do not remove
-the outliers in this stage of analysis. Instead, we ose the *median* and
-the *mad* as robust alternatives for the mean and the standard
-deviation.
+The boxplot shows that scaling is necesary: in this case the data needs
+a log scaling.
 
-### Data transformation
+``` r
+## Log-scaling of data
+clean_data <- log2(norm_data+0.1)
 
-To be performed for a valid reason only\! Always check the data first
-becaus it could be already transformed.
+## Boxplot
 
-**Log Transformation** –\> To know if it is necessary, look at the
-boxplot and at the value reached by the data. **Ranks** **Z-score** –\>
-same as scale normalization ??
+boxplot(clean_data, main = "Boxplot of scaled counts", xlab = "samples", ylab = "normalized counts",
+        xaxt = "n", col = my_colors[7], outcex=0.5)
+```
 
-### Principal Component Analysis
+![](Network-basedDA_files/figure-gfm/scaling-1.png)<!-- -->
+
+# Principal Component Analysis (week 3)
 
 It is a method for dimensionality reduction. Thousands of dimensions can
 be reduced up to 2 or 3 dimensions. The PCA scores show the coordinates
 with respect to these new dimensions for the samples of the dataset.
 
------
-
-17/03
-
 ``` r
-my_colors <- c("#2e005d", "#5c008b", "#8e008b", "#ff8300", "#ff6200", "#d1105a", "#05a8aa")
-
-korClean <- korData[which(apply(korData, 1, sum) > 0),]
-# dim(korClean)
-korClean2 <- log1p(korClean)
-# boxplot(korClean2)
-korClean3 <- as.data.frame(scale(korClean2))
-boxplot(korClean3, main = "Boxplot of normalized counts", xlab = "Samples", ylab = "Counts",
-        xaxt = "n", col = my_colors[7])
-```
-
-![](Network-basedDA_files/figure-gfm/preprocessing-1.png)<!-- -->
-
-``` r
-pca <- prcomp(t(korClean3))
+pca <- prcomp(t(clean_data))
 
 # summary(pca)
 # screeplot(pca)
@@ -509,7 +233,7 @@ p
 ``` r
 ## PC 1 and 2
 
-pc12 <- merge(pca$x[,c(1,2)], korTable, by="row.names")
+pc12 <- merge(pca$x[,c(1,2)], info_samples, by="row.names")
 
 p <- ggplot(pc12, aes(x=PC1, y=PC2, shape=Sex, color=Group)) +
   geom_point(size = 3)+
@@ -520,7 +244,7 @@ p
 
 ## Pc 2 and 3
 
-pc23 <- merge(pca$x[,c(2,3)], korTable, by="row.names")
+pc23 <- merge(pca$x[,c(2,3)], info_samples, by="row.names")
 
 p <- ggplot(pc23, aes(x=PC2, y=PC3, shape=Sex, color=Group)) +
   geom_point(size = 3)+
@@ -531,7 +255,7 @@ p
 
 ## PC 1 and 3
 
-pc13 <- merge(pca$x[,c(1,3)], korTable, by="row.names")
+pc13 <- merge(pca$x[,c(1,3)], info_samples, by="row.names")
 
 p <- ggplot(pc13, aes(x=PC1, y=PC3, shape=Sex, color=Group)) +
   geom_point(size = 3)+
@@ -566,109 +290,24 @@ p
 
 <img src="Network-basedDA_files/figure-gfm/pca_plot-1.png" width="50%" /><img src="Network-basedDA_files/figure-gfm/pca_plot-2.png" width="50%" /><img src="Network-basedDA_files/figure-gfm/pca_plot-3.png" width="50%" /><img src="Network-basedDA_files/figure-gfm/pca_plot-4.png" width="50%" /><img src="Network-basedDA_files/figure-gfm/pca_plot-5.png" width="50%" />
 
------
+# Data Clustering (week 4)
 
-# Week 4
+## K-means
 
-22/03
+Unsupervised method, simple and quick to understand and implement. It
+relies on the tuning parameter K (number of resulting clusters) and is
+sensitive to outliers, not an advanced methods, to be used for a first
+exploratory analysis.
 
-## Classification methods
-
-  - Unsupervised approaches: k-means, hierarchical clustering, …
-  - Supervised approaches: linear and quadratic discriminants, KNN,
-    decision trees, neural networks, support vector machines, …
-
-The best method must be evaluated depending on the data.
-
-**Machine learning** is the study of methods that can learn from and
-make predictions on data.
-
-### Unsupervised learning
-
-The data have no target attribute. Unsupervidsed learning algorithms are
-aimed at **data clustering**.
-
-Main aspect of clustering:
-
-  - The algorithm (partitional, hierarchical, …)
-  - The distance function
-  - The clustering quality (inter-cluster distance maximized/minimized)
-
-What is a **outlier**: Tukey’s criterion.
-
-`IQR = Q3 - Q1`
-
-Below this threshold: `Q1 - 1.5*IQR`
-
-Above this threshold: `Q3 + 1.5*IQR`
-
-Distances can be computed in a number of ways. One example is the
-**Euclidean distance** –\> the most inutuitive way to compute distance:
-with the pythagorean theorem. Another one is the **Manhattan distance**.
-
-Distances between clusters: \* Simple linkage –\> distance between the
-two closest points in the clusters \* Average linkage (usually the
-default option) \* Complete linkage –\> the two most distant points in
-the clusters
-
-### K-means
-
-1.  Randomly choose *k* data points (k = number of clusters) to be the
-    initial *centroids*. The number of clusters must be decided by the
-    user, in some cases an algorithm is needed for this, in other we
-    could know it in advance for some reason.
-2.  Assign each data point to the closest centroid
-3.  Re-compute the centroids using the current cluster membership.
-4.  Repeat from point 2 until convergence is reached. (e.g. until
-    centroids remain the same for a couple of repetitions)
-
-Strengths of K-means: \* Simple to understand and implement \*
-Efficient: time complexity = O(tkn) * *
-
-Limitations of K-means \* K must be chosen, not always convenient. \*
-Numerical datasets are better because it relies on a numerical distance.
-\* Greatly affected by outliers: they shift the position of the
-centroid. \* Sensitive to the initial seeds. \* Only works with clusters
-with simple shapes, such as ellipsoids of some kind.
-
-### Hierarchical clustering
-
-It produces a **Dendrogram**. Compute a distance matrix and cluster
-together the points with the lower distance. Then recompute the distance
-matrix considering the new cluster as one point and continue. There is a
-finite number of steps. In the end, decide where to cut the tree to have
-the preferred number of clusters –\> the number of clusters is decided
-at the end.
-
------
-
-24/03
+K-means is computed setting K=2, since we know there are two groups of
+patients (normal and tumor). The results are plotted with a pca for a
+better visualization.
 
 ``` r
-## 4 clusters
+## Compute K-means clusters
 
-km <- kmeans(t(korClean3), 4)
-# table(km$cluster)
-
-km2plot <- data.frame("Row.names" = names(km$cluster),
-                      "Cluster" = as.factor(km$cluster))
-km2plot <- merge(km2plot, pc12, by="Row.names")
-
-p <- ggplot(km2plot, aes(x=PC1, y=PC2, color=Cluster, shape=Group)) +
-  geom_point(size = 3)+
-  scale_shape_manual(values = c(0,15))+
-  scale_color_manual(values = my_colors[c(2,4,6,7)])+
-  ggtitle("K-means results - 4 clusters")
-  
-p
-```
-
-![](Network-basedDA_files/figure-gfm/k-means-1.png)<!-- -->
-
-``` r
-## 2 clusters
-
-km2 <- kmeans(t(korClean3), 2)
+K=2
+km2 <- kmeans(t(clean_data), K)
 # table(km$cluster)
 
 km2plot <- data.frame("Row.names" = names(km2$cluster),
@@ -684,19 +323,63 @@ p <- ggplot(km2plot, aes(x=PC1, y=PC2, color=Cluster, shape=Group)) +
 p
 ```
 
-![](Network-basedDA_files/figure-gfm/k-means-2.png)<!-- -->
+![](Network-basedDA_files/figure-gfm/k-means-1.png)<!-- -->
 
 ``` r
-dist_matrix <- dist(t(korClean3), method = "euclidean")
+rm(km2plot)
+```
+
+``` r
+## Create list with the predictions
+pred_k <- km2$cluster
+pred_k[which(pred_k==1)] <- "tumor"
+pred_k[which(pred_k==2)] <- "normal"
+pred_k <- factor(pred_k,levels = c("normal", "tumor"))
+
+## Accuracy
+acc_k <- mean(pred_k==info_samples$Group)
+
+## AUC from ROC curve
+roc_k <- roc(as.numeric(pred_k), as.numeric(info_samples$Group))
+# plot(roc_rf)
+auc_k <- auc(roc_k)
+```
+
+``` r
+## Crete dataframe to store the accuracy results
+res_df <- data.frame(Kmeans = c(acc_k, auc_k))
+rownames(res_df) <- c("accuracy", "AUC")
+```
+
+## Hierarchical clustering
+
+It produces a dendrogram: at each step a distance matrix is computed and
+the points with the lower distance are clustered together, then the
+distance matrix is recomputed considering the new cluster as one point.
+In the end, the tree is cut to have the chosen number of clusters.
+
+For this clustering method, distance between samples and between
+clusters must be computed. In this case, sample distances are computed
+with the *Euclidean* method, and the cluster distances with *average
+linkage*.
+
+``` r
+## Distance matrix
+dist_matrix <- dist(t(clean_data), method = "euclidean")
+## Clustering
 hc <- hclust(dist_matrix, method ="average")
 hc$height <- hc$height-80
-hclusters <- cutree(hc, k = 7)
-hclusters <- hclusters[order(names(hclusters))]
-tipData <- data.frame(samples=rownames(korTable),
-                      group=korTable$Group,
-                      sex=korTable$Sex)
 
-# hc <- ggtree(hc)
+## Cut the tree, in this case the best division is obtained by cutting the tree after 4 divisions.
+## K=6 because the tree is divided in 6 clusters, the first 5 are grouped together as cluster 0.
+hclusters <- cutree(hc, k = 6)
+
+## Plot the tree
+hclusters <- hclusters[order(names(hclusters))]
+tipData <- data.frame(samples=rownames(info_samples),
+                      group=info_samples$Group,
+                      sex=info_samples$Sex)
+
 hcc <- groupOTU(.data = ggtree(hc), group_name = "cluster", .node = names(hclusters)[which(hclusters==1) ])+
   aes(linetype=cluster)
 
@@ -710,146 +393,202 @@ hcc %<+% tipData +
 ![](Network-basedDA_files/figure-gfm/hierarchical-1.png)<!-- -->
 
 ``` r
-  # geom_tiplab(angle=90, hjust=-0.5, offset=-10, show.legend=FALSE, size=2.8)
+## Create list with the predictions
+pred_h <- hclusters
+pred_h[which(hclusters==1)] <- "normal"
+pred_h[which(hclusters!=1)] <- "tumor"
+pred_h <- factor(pred_h,levels = c("normal", "tumor"))
+
+## Accuracy
+acc_h <- mean(pred_h==info_samples$Group)
+
+## AUC from ROC curve
+roc_h <- roc(as.numeric(pred_h), as.numeric(info_samples$Group))
+# plot(roc_rf)
+auc_h <- auc(roc_h)
+
+
+## Update results table
+res_df["Hierarchical"] <- c(acc_h, auc_h)
 ```
 
------
+# Random Forests (week 5)
 
-# Week 5
+From now on, the classification methods are supervised methods. For this
+purpose, the data is divided in a training and a test set.
 
-29/03
+``` r
+# The CARET package is used to divide the dataset in training and test set
+set.seed(1)
 
-## Data clustering: Random Forests
+train_ind <- createDataPartition(info_samples$Group, p = 0.7)$Resample1
 
-**Decision tree learning** –\> supervised method. The tree is a
-collection of tests: each node is a set, each branch is a feature (a
-possible answer to the set) and each leaf is a classification. The order
-of the features in the tree is decided based on entropy: choose the test
-that brings you clodser to a decision.
+train_data <- clean_data[train_ind]
+# dim(train_data)
+test_data <- clean_data[-train_ind]
+# dim(test_data)
+yTrain <- info_samples[train_ind,"Group"]
+yTest <- info_samples[-train_ind,"Group"]
+```
 
-When building the tree, the best attribute for each test are chosen with
-the concept of entropy: compute the gain and choose the possibility that
-allows to reach the higher information gain. The root attribute is also
-chosen this way.
+Random forest requires the tuning of 2 parameters: *ntree* and the
+*mtry*. The first is the number of trees to grow and the second is the
+number of features (genes) considered when building each tree. The best
+parameters are chosen comparing OOB errors of random forests fitted with
+different values of the two parameters.
 
-Problem: overfitting. Increasing the number of levels, the quality of
-the training data goes up but the accuracy of the predicion on the test
-data does not.
+``` r
+set.seed(1)
 
-To avoid overfitting:
+## Fit a first random forest to determine the best number of trees 
+rf <- randomForest(t(train_data), y = yTrain)
+plot(rf)
+```
 
-  - Prepruning –\> stop growing the tree when you think there is enough
-    data to make reliable choices.
-  - Postpruning –\> grow the whole tree and eliminate the nodes that do
-    not have sufficient evidence (most popular)
+![](Network-basedDA_files/figure-gfm/n_trees-1.png)<!-- -->
 
-Other methods are possible (es: cross-validation)
+``` r
+ntree <- 200
+```
 
-With numerical (continuous) values –\> the easiest thing to do is to use
-a threshold to discretize the numerical data.
+The first plot shows that a plateau in the OOB error is reached with a
+number of trees around 200.
 
-Attributes with many values are a situation that can causes problems,
-because the gain is going to select it. With a great number of possible
-values, it is likely that this variable will discriminate well on a
-small sample. Entropy appreaches the max value. Use *GainRatio* instead
-of just *Gain*.
+``` r
+control <- trainControl(method='cv', 
+                        search='grid')
+#create tunegrid with 15 values from 1:15 for mtry to tunning model. Our train function will change number of entry variable at each split according to tunegrid. 
+mtry <- sqrt(nrow(train_data))
+tunegrid <- expand.grid(mtry = seq(mtry-50, mtry+50, by = 10)) 
 
-Unknown attribute values –\> If node n does not have attribute A: if n
-tests A, assign to it the most common value of A among the other nodes.
+rf_gridsearch <- train(x=t(train_data), y=yTrain,
+                       method = 'rf',
+                       ntree=200,
+                       metric = 'Accuracy',
+                       tuneGrid = tunegrid,
+                       trControl = control)
+# print(rf_gridsearch)
 
-**Gini index**: can be interpreted as expected error rate.
+mtry <- rf_gridsearch$bestTune$mtry
+```
 
-Advantages of decision trees:
+The best mtry results to be 251.2747. Next, a model is built on the
+training set with these parameters and evaluated on the test set.
 
-  - Very fast
-  - Flexible
-  - interpretability: it easy to understand the process that led the
-    algorithm to that output
+``` r
+set.seed(1)
 
-Disadvatages:
+tunegrid <- expand.grid(.mtry=c(mtry))
+rf <- train(x=t(train_data), y=yTrain,
+             method = 'rf',
+             ntree=200,
+             metric = 'Accuracy',
+             tuneGrid = tunegrid,
+             trControl = control)
+# print(rf)
+```
 
-  - Instability: there is high variance
-  - Not always competitive with other algorithms in terms of accuracy
+``` r
+set.seed(1)
 
-**Ensemble learning** –\> Generate a group of base-learners which when
-combined have higher accuracy.
+## Apply it on the test set
+pred_rf <- predict(rf, t(clean_data))
 
-Each learner uses different:
+## Accuracy
+acc_rf <- mean(pred_rf==info_samples$Group)
+## Confusion matrix
+# table(pred_rf, yTest)
 
-  - Algorithms
-  - Parameters
-  - Representations (Modalities)
-  - Training sets
-  - Subproblems
+## AUC from ROC curve
+# roc_rf <- roc(yTrain, rf$votes[,2])
+prob_rf <- predict(rf, t(test_data), type = "prob")
+roc_rf <- roc(yTest, prob_rf$normal)
+# plot(roc_rf)
+auc_rf <- auc(roc_rf)
 
-Ensamble learning decides classification based on majority voting (??).
+## Update df
+res_df["RandomForest"] <- c(acc_rf, auc_rf)
+```
 
-**Bootstrap** –\> randomly draw datasets with replacement from the
-training data, each sample the same size as the original training set.
-
-**Bagging** –\> Bootstrap + Aggregation (voting):
-
-  - Take K bootstrap samples (with replacement)
-  - Train K different classifiers on these bootstrap samples
-  - For a new query, let all classifiers make a prediction and take an
-    average (or majority vote)
-
-**Random forest classifier**: –\> Bagging with decorrelated trees.
-
-  - Draw K bootstrap samples of a fixed size
-  - Grow a DT, randomly sampling a few attributes to split on at each
-    internal node
-  - Take majority vote using the predictions of the trees for a new
-    query (or take average of predictions)
-
------
-
-# Week 6
-
-05/04
-
-## Linear Methods?
-
-Useful information:
-
-  - Between-class distance –\> between the centroids of different
-    classes
-  - Within-class distance –\> accumulated distance from the instances to
-    centroid of the class
-
-### Linear Discriminant Analysis
+# Linear Discriminant Analysis (week 6)
 
 The idea of LDA is to reduce dimensionality while preserving the ability
 to discriminate. The samples are projected on a line. Choose the line
 that maximizes the separation of the points.
 
-Find the mathematical centroid: it is the sample mean (mu). mu\~ means
-??? –\> projection of the points on the line? s\~2 is the sum of the
-distances of the projections to the center of the separation line ???
-
-### Performance evaluation of classifiers
-
-Confusion matrix
-
------
-
-# Week 7
-
-14/04
-
-## Lasso and Ridge
+In order to perform an lda, a feature selection is necessary to reduce
+the number of genes considered. In this case, it is dove with a ttest.
 
 ``` r
-# Library "glmnet" is popular to do LASSO regression.
+## T test
+tt <- rowttests(as.matrix(clean_data), info_samples$Group)
+tt <- which(p.adjust(tt$p.value)<0.1)
+
+## Reduce the original dataset
+tt_data <- clean_data[tt,]
+# dim(tt_data)
+tt_train <- tt_data[train_ind]
+# dim(tt_train)
 ```
 
------
+Fit an lda model with a 10-fold cross-validation and evaluate the model.
 
-# Week 8
+``` r
+set.seed(1)
 
-21/04
+## Fit the model with cv
+control <- trainControl(method="cv", number=10)
+lda_fit <- train(t(tt_train), yTrain, method="lda", 
+                 metric="Accuracy", trControl=control)
+# print(lda_fit)
 
-## Scudo
+## Apply it on the test set
+pred_lda <- predict(lda_fit, t(test_data))
+
+## Accuracy
+acc_lda <- mean(pred_lda==yTest)
+
+## AUC from ROC curve
+roc_lda <- roc(as.numeric(pred_lda), as.numeric(yTest))
+# plot(roc_rf)
+auc_lda <- auc(roc_lda)
+
+
+## Update results table
+res_df["LDA"] <- c(acc_lda, auc_lda)
+```
+
+# Lasso and Ridge regression (week 7)
+
+``` r
+set.seed(1)
+
+## fit Lasso with cv
+control <- trainControl(method="cv", number=10)
+tunegrid <- expand.grid(alpha=1,
+                        lambda=seq(0,1,by=0.05))
+lasso_fit <- train(t(train_data), yTrain, method="glmnet", family="binomial", 
+                 tuneGrid = tunegrid,
+                 metric="Accuracy", trControl=control)
+# print(lasso_fit)
+
+## Apply it on the test set
+pred_lasso <- predict(lasso_fit, t(test_data))
+
+## Accuracy
+acc_lasso <- mean(pred_lasso==yTest)
+
+## AUC from ROC curve
+roc_lasso <- roc(as.numeric(pred_lasso), as.numeric(yTest))
+# plot(roc_rf)
+auc_lasso <- auc(roc_lasso)
+
+
+## Update results table
+res_df["Lasso"] <- c(acc_lasso, auc_lasso)
+```
+
+# Scudo (week 8)
 
 The goal of this method is to avoid batch effects and obtain a method
 that is repeatable and reproducible.
@@ -860,59 +599,21 @@ signature are the most and the less expressed. Then signatures are
 compared and a map is constructed, where clusters can be seen if they
 are colsely connected.
 
-Closely connected samples = similar signatures
-
-The idea of ranking makes the method robust to expression variations
-across samples
-
-Distance measure: similar to GSEA –\> the signature (short) is compared
-to a long ranked list of genes. A running sum is computed and plotted.
-From the plot it is possible to see where the peak falls: to which part
-of the long list the signature looks like (?).
-
-Parameters:
-
-  - n1 = n2 (usually equal number) –\> most and less expressed genes
-  - N –\> percentage of similarity needed to draw an edge between two
-    samples
-
-Supervised version: performes a feature selection before computing the
-connectivity scores. A new parameter is introduced:
-
-  - p –\> p-value threshold to consider a feature
-
-Possible improvements:
-
-  - better distance calculation method
-  - …
-
-<!-- end list -->
-
 ``` r
-# The CARET package is used to divide the dataset in training and test set
+## Apply SCUDO on the training set
 
-inTrain <- createDataPartition(korTable$Group, p=0.75)
-inTrain <- rownames(korTable)[inTrain$Resample1]
-
-korTrain <- korClean3[inTrain]
-# dim(korTrain)
-korTest <- korClean3[-which(colnames(korClean3) %in% inTrain)]
-# dim(korTest)
-
-# Apply the SCUDO on the training set
-
-trainRes <- scudoTrain(korTrain, groups = korTable[inTrain,]$Group,
-                       nTop = 25, nBottom = 25, alpha = 0.05)
-trainRes
+scudo_train <- scudoTrain(train_data, groups = yTrain,
+                          nTop = 25, nBottom = 25, alpha = 0.05)
+scudo_train
 ```
 
     ## Object of class ScudoResults
     ## Result of scudoTrain 
     ## 
-    ## Number of samples      :  52 
+    ## Number of samples      :  48 
     ## Number of groups       :  2 
-    ##     normal :  26 samples
-    ##     tumor :  26 samples
+    ##     normal :  24 samples
+    ##     tumor :  24 samples
     ## upSignatures length    :  25 
     ## downSignatures length  :  25 
     ## Fold-changes           :  computed 
@@ -921,32 +622,435 @@ trainRes
     ##     Test               :  Wilcoxon rank sum test
     ##     p-value cutoff     :  0.05 
     ##     p.adjust method    :  none 
-    ##     Selected features  :  14050
+    ##     Selected features  :  17465
 
 ``` r
 # inspect signatures 
 # upSignatures(trainRes)
 # consensusUpSignatures(trainRes)
 
-# generate and plot map of training samples
-trainNet <- scudoNetwork(trainRes, N = 0.2)
-scudoPlot(trainNet, vertex.label = NA)
+## perform validation using testing samples
+scudo_test <- scudoTest(scudo_train, test_data, yTest,
+                        nTop = 25, nBottom = 25)
+
+## Plot the results
+testNet <- scudoNetwork(scudo_test, N = 0.2)
+scudoPlot(testNet, vertex.label = NA)
 ```
 
 ![](Network-basedDA_files/figure-gfm/scudo-1.png)<!-- -->
 
 ``` r
-# perform validation using testing samples
-testRes <- scudoTest(trainRes, korTest, korTable[-which(rownames(korTable)%in%inTrain),]$Group,
-                     nTop = 25, nBottom = 25)
-testNet <- scudoNetwork(testRes, N = 0.2)
-scudoPlot(testNet, vertex.label = NA)
+## Classification
+pred_scudo <- scudoClassify(train_data, test_data,
+                            nTop = 25, nBottom = 25, N = 0.2,
+                            trainGroups = yTrain,
+                            featureSel = FALSE)
+## Accuracy
+acc_scudo <- mean(pred_scudo$predicted==yTest)
+
+## AUC from ROC curve
+roc_scudo <- roc(yTest, pred_scudo$scores[,2])
+# plot(roc_rf)
+auc_scudo <- auc(roc_scudo)
+
+
+## Update results table
+res_df["Scudo"] <- c(acc_scudo, auc_scudo)
 ```
 
-![](Network-basedDA_files/figure-gfm/scudo-2.png)<!-- -->
+# Models comparison
+
+The models fitted before are compared by accuracy and AUC. The random
+forest appears to be the best performing model according to both the
+metrics.
 
 ``` r
-# identify clusters on map
-# testClust <- igraph::cluster_spinglass(testNet, spins = 2)
-# plot(testClust, testNet, vertex.label = NA)
+res_plot <- data.frame(Model = rep(colnames(res_df),2),
+                       Metric = rep(c("Accuracy", "AUC"), each=ncol(res_df)),
+                       Value=c(as.numeric(res_df[1,]), as.numeric(res_df[2,])))
+res_plot
 ```
+
+    ##           Model   Metric     Value
+    ## 1        Kmeans Accuracy 0.1470588
+    ## 2  Hierarchical Accuracy 0.7647059
+    ## 3  RandomForest Accuracy 0.9705882
+    ## 4           LDA Accuracy 0.9500000
+    ## 5         Lasso Accuracy 0.9500000
+    ## 6         Scudo Accuracy 0.9000000
+    ## 7        Kmeans      AUC 0.8642857
+    ## 8  Hierarchical      AUC 0.7897727
+    ## 9  RandomForest      AUC 0.9800000
+    ## 10          LDA      AUC 0.9545455
+    ## 11        Lasso      AUC 0.9545455
+    ## 12        Scudo      AUC 0.8800000
+
+``` r
+ggplot(res_plot, aes(x=Model, y=Value, fill=Metric))+
+  geom_bar(stat="identity", position="dodge", width=0.5)+
+  scale_fill_manual(values = c(my_colors[c(4,6)]))+
+  ggtitle("Models evaluation")
+```
+
+![](Network-basedDA_files/figure-gfm/res-1.png)<!-- -->
+
+# Feature selection
+
+Since random forest was selected as the best performing model, a feature
+selection was performed considering the importance score assigned to
+each gene when fitting the random forest. The following genes are the
+most relevant ones for the classification of the samples according to
+the random forest algorithm.
+
+``` r
+# Importance
+imp <- varImp(rf)
+imp <- imp$importance
+imp["gene"] <- rownames(imp)
+colnames(imp) <- c("importance", "gene")
+imp <- imp[order(imp$importance, decreasing = TRUE),]
+rownames(imp) <- seq(1:nrow(imp))
+geneList <- unlist(strsplit(imp$gene, ".", fixed = TRUE))
+imp$gene_clean <- geneList[which(startsWith(geneList, "ENS"))]
+
+head(imp)
+```
+
+    ##   importance               gene      gene_clean
+    ## 1  100.00000  ENSG00000167916.4 ENSG00000167916
+    ## 2   93.25853 ENSG00000168542.14 ENSG00000168542
+    ## 3   73.41091 ENSG00000125485.17 ENSG00000125485
+    ## 4   64.32587 ENSG00000244306.10 ENSG00000244306
+    ## 5   61.65081 ENSG00000143171.12 ENSG00000143171
+    ## 6   60.75153 ENSG00000148848.14 ENSG00000148848
+
+``` r
+imp25 <- imp$gene[1:25]
+imp25_data <- clean_data[is.element(rownames(clean_data), imp25),]
+
+div <- c("#2e005d", "#662a71", "#945789", "#bc87a5", "#debbc8", 
+        "#fcf1f3", "#ffd2d8", "#ffb2b4", "#ff9486", "#ff7852", "#ff6200")
+# hmcol <- rev(colorRampPalette(brewer.pal(11,"RdBu"))(256))
+hmcol <- viridis(1000, option="mako")
+# colnames(imp25_data) <- korTable$Group # This will label the heatmap columns
+csc <- rep(my_colors[3],ncol(imp25_data))
+csc[info_samples$Group=='tumor'] <- my_colors[5]
+# column side color will be purple for T and orange for B
+imp25_data <- as.matrix(imp25_data)
+heatmap(imp25_data, scale="row", col=hmcol, ColSideColors=csc,
+        # main = "25 most important genes", 
+        labCol = FALSE)
+legend(x=0.72, y=1, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
+```
+
+![](Network-basedDA_files/figure-gfm/heatmap-1.png)<!-- -->
+
+# Functional enrichment analysis (week 9)
+
+The functional enrichment analysis is performed with *gprofiler2*, with
+the objective of finding out the molecular functions more represented
+among the most important genes. For this purpose, the 200 genes with
+highest importance score according to the random forest model fitted
+before are considered.
+
+``` r
+geneList <- imp$gene_clean[1:200]
+
+gost_res <- gost(query = geneList,
+                organism = "hsapiens", 
+                ordered_query = FALSE, multi_query = FALSE, significant = FALSE, 
+                exclude_iea = FALSE, measure_underrepresentation = FALSE, evcodes = FALSE,
+                user_threshold = 0.05, correction_method = "g_SCS",
+                domain_scope = "annotated", custom_bg = NULL, numeric_ns = "", 
+                sources = NULL, as_short_link = FALSE)
+
+gost_df <- gost_res$result[c("term_id", "term_name", "p_value", "significant")]
+gost_df <- gost_df[order(gost_df$p_value),]
+gost_df <- gost_df[which(gost_df$significant==TRUE),]
+
+# head(gost_df)
+
+# visualize results using a Manhattan plot
+p <- gostplot(gost_res, capped = TRUE, interactive = FALSE)
+publish_gostplot(p, filename = NULL)
+```
+
+![](Network-basedDA_files/figure-gfm/functional-1.png)<!-- -->
+
+``` r
+publish_gosttable(gost_res, highlight_terms = gost_df$term_id[1:10],
+                  use_colors = TRUE, filename = NULL,
+                  show_columns = c("source","term_id", "term_name", "p_value"))
+```
+
+![](Network-basedDA_files/figure-gfm/functional-2.png)<!-- -->
+
+# Biological networks (week 10)
+
+The network analysis is performed with *pathfindR*, using the *KEGG*,
+*Gene Ontology* and *Reactome* databases. For this analysis, the 100
+genes with the lowest p value obtained with a t test are taken into
+consideration. This list of genes has 23 genes in common with the one of
+the most important genes used for the functional enrichment.
+
+``` r
+## T test
+tt <- rowttests(as.matrix(clean_data), info_samples$Group)
+tt <- tt[order(tt$p.value),]
+
+geneList_tt <- data.frame(ENSEMBL = rownames(tt)[1:100],
+                          p.value = tt$p.value[1:100])
+                          # p.adjust = p.adjust(tt$p.value[1:100]))
+
+a <- unlist(strsplit(geneList_tt$ENSEMBL, ".", fixed = TRUE))
+geneList_tt$ENSEMBL <- a[which(startsWith(a, "ENS"))]
+a <- bitr(geneList_tt$ENSEMBL, 
+          fromType = "ENSEMBL",
+          toType = "SYMBOL",
+          OrgDb = org.Hs.eg.db)
+
+geneList_tt <- merge(a,geneList_tt)
+rm(a)
+
+# dim(geneList_tt)
+```
+
+``` r
+net_KEGG <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
+                          iterations = 1, # keeps running time low - default is 10
+                          gene_sets = "KEGG", 
+                          visualize_enriched_terms = FALSE,
+                          # output_dir = NULL,
+                          silent_option = FALSE)
+```
+
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |.......................                                               |  33%
+    ##    inline R code fragments
+    ## 
+    ##   |                                                                              |...............................................                       |  67%
+    ## label: setup (with options) 
+    ## List of 1
+    ##  $ include: logi FALSE
+    ## 
+    ##   |                                                                              |......................................................................| 100%
+    ##   ordinary text without R code
+    ## 
+    ## 
+    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS results.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a11d560b6.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a5afedae6.html 
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |..................                                                    |  25%
+    ##    inline R code fragments
+    ## 
+    ##   |                                                                              |...................................                                   |  50%
+    ## label: setup (with options) 
+    ## List of 1
+    ##  $ include: logi FALSE
+    ## 
+    ##   |                                                                              |....................................................                  |  75%
+    ##   ordinary text without R code
+    ## 
+    ##   |                                                                              |......................................................................| 100%
+    ## label: table (with options) 
+    ## List of 2
+    ##  $ echo   : logi FALSE
+    ##  $ comment: logi NA
+    ## 
+    ## 
+    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS enriched_terms.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a12664f1b.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a6a6ce1f3.html 
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |............                                                          |  17%
+    ##    inline R code fragments
+    ## 
+    ##   |                                                                              |.......................                                               |  33%
+    ## label: setup (with options) 
+    ## List of 1
+    ##  $ include: logi FALSE
+    ## 
+    ##   |                                                                              |...................................                                   |  50%
+    ##   ordinary text without R code
+    ## 
+    ##   |                                                                              |...............................................                       |  67%
+    ## label: converted_tbl, table1 (with options) 
+    ## List of 1
+    ##  $ comment: logi NA
+    ## 
+    ##   |                                                                              |..........................................................            |  83%
+    ##   ordinary text without R code
+    ## 
+    ##   |                                                                              |......................................................................| 100%
+    ## label: gene_wo_interaction, table2 (with options) 
+    ## List of 1
+    ##  $ comment: logi NA
+    ## 
+    ## 
+    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS conversion_table.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a5478f847.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a6505a0b1.html
+
+``` r
+# ## cluster enriched terms
+# patR_clu <- cluster_enriched_terms(patR_res)
+# ## term-gene graph of top 10 terms
+# term_gene_graph(patR_res)
+
+net_GO <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
+                          iterations = 1, # keeps running time low - default is 10
+                          gene_sets = "GO-All", 
+                          visualize_enriched_terms = FALSE,
+                          # output_dir = NULL,
+                          silent_option = FALSE)
+```
+
+![](Network-basedDA_files/figure-gfm/net-1.png)<!-- -->
+
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |.......................                                               |  33%
+    ##    inline R code fragments
+    ## 
+    ##   |                                                                              |...............................................                       |  67%
+    ## label: setup (with options) 
+    ## List of 1
+    ##  $ include: logi FALSE
+    ## 
+    ##   |                                                                              |......................................................................| 100%
+    ##   ordinary text without R code
+    ## 
+    ## 
+    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS results.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a3bef1969.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a74985104.html 
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |..................                                                    |  25%
+    ##    inline R code fragments
+    ## 
+    ##   |                                                                              |...................................                                   |  50%
+    ## label: setup (with options) 
+    ## List of 1
+    ##  $ include: logi FALSE
+    ## 
+    ##   |                                                                              |....................................................                  |  75%
+    ##   ordinary text without R code
+    ## 
+    ##   |                                                                              |......................................................................| 100%
+    ## label: table (with options) 
+    ## List of 2
+    ##  $ echo   : logi FALSE
+    ##  $ comment: logi NA
+    ## 
+    ## 
+    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS enriched_terms.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a67253489.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a2a1769d5.html 
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |............                                                          |  17%
+    ##    inline R code fragments
+    ## 
+    ##   |                                                                              |.......................                                               |  33%
+    ## label: setup (with options) 
+    ## List of 1
+    ##  $ include: logi FALSE
+    ## 
+    ##   |                                                                              |...................................                                   |  50%
+    ##   ordinary text without R code
+    ## 
+    ##   |                                                                              |...............................................                       |  67%
+    ## label: converted_tbl, table1 (with options) 
+    ## List of 1
+    ##  $ comment: logi NA
+    ## 
+    ##   |                                                                              |..........................................................            |  83%
+    ##   ordinary text without R code
+    ## 
+    ##   |                                                                              |......................................................................| 100%
+    ## label: gene_wo_interaction, table2 (with options) 
+    ## List of 1
+    ##  $ comment: logi NA
+    ## 
+    ## 
+    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS conversion_table.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a229f7099.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a8bccab2.html
+
+``` r
+net_Reactome <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
+                          iterations = 1, # keeps running time low - default is 10
+                          gene_sets = "Reactome", 
+                          visualize_enriched_terms = FALSE,
+                          # output_dir = NULL,
+                          silent_option = FALSE)
+```
+
+![](Network-basedDA_files/figure-gfm/net-2.png)<!-- -->
+
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |.......................                                               |  33%
+    ##    inline R code fragments
+    ## 
+    ##   |                                                                              |...............................................                       |  67%
+    ## label: setup (with options) 
+    ## List of 1
+    ##  $ include: logi FALSE
+    ## 
+    ##   |                                                                              |......................................................................| 100%
+    ##   ordinary text without R code
+    ## 
+    ## 
+    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS results.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a705580d7.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a6c0f8a9d.html 
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |..................                                                    |  25%
+    ##    inline R code fragments
+    ## 
+    ##   |                                                                              |...................................                                   |  50%
+    ## label: setup (with options) 
+    ## List of 1
+    ##  $ include: logi FALSE
+    ## 
+    ##   |                                                                              |....................................................                  |  75%
+    ##   ordinary text without R code
+    ## 
+    ##   |                                                                              |......................................................................| 100%
+    ## label: table (with options) 
+    ## List of 2
+    ##  $ echo   : logi FALSE
+    ##  $ comment: logi NA
+    ## 
+    ## 
+    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS enriched_terms.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a7199d93c.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a399cfcd0.html 
+    ##   |                                                                              |                                                                      |   0%  |                                                                              |............                                                          |  17%
+    ##    inline R code fragments
+    ## 
+    ##   |                                                                              |.......................                                               |  33%
+    ## label: setup (with options) 
+    ## List of 1
+    ##  $ include: logi FALSE
+    ## 
+    ##   |                                                                              |...................................                                   |  50%
+    ##   ordinary text without R code
+    ## 
+    ##   |                                                                              |...............................................                       |  67%
+    ## label: converted_tbl, table1 (with options) 
+    ## List of 1
+    ##  $ comment: logi NA
+    ## 
+    ##   |                                                                              |..........................................................            |  83%
+    ##   ordinary text without R code
+    ## 
+    ##   |                                                                              |......................................................................| 100%
+    ## label: gene_wo_interaction, table2 (with options) 
+    ## List of 1
+    ##  $ comment: logi NA
+    ## 
+    ## 
+    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS conversion_table.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a6b6c0fa2.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a3cf2d8a0.html
+
+![](Network-basedDA_files/figure-gfm/net-3.png)<!-- -->
+
+``` r
+enrichment_chart(net_KEGG)
+```
+
+![](Network-basedDA_files/figure-gfm/net_plot-1.png)<!-- -->
+
+``` r
+enrichment_chart(net_GO)
+```
+
+![](Network-basedDA_files/figure-gfm/net_plot-2.png)<!-- -->
+
+``` r
+enrichment_chart(net_Reactome)
+```
+
+![](Network-basedDA_files/figure-gfm/net_plot-3.png)<!-- -->
+
+``` r
+term_gene_graph(net_Reactome, num_terms = 7, use_description = TRUE)
+```
+
+![](Network-basedDA_files/figure-gfm/reactome-1.png)<!-- -->
