@@ -3,7 +3,6 @@ title: "Network-based Data Analysis Project"
 output:
   github_document:
     toc: true
-    toc_depth: 2
     # theme: yeti
     # html_document:
     #   df_print: paged
@@ -103,9 +102,6 @@ Genes that show very low expression in all the samples are filtered out of the d
 # Only keep genes with at least a total of 10 counts
 filter_data <- full_data[which(apply(full_data, 1, sum) > 10),]
 dim(filter_data)
-
-# boxplot(filter_data, main = "Boxplot", xlab = "Samples", ylab = "Counts",
-#         xaxt = "n", col = my_colors[7])
 ```
 
 ## Normalization
@@ -252,6 +248,7 @@ K-means is computed setting K=2, since we know there are two groups of patients 
 The results are plotted with a pca for a better visualization.
 
 ```{r k-means}
+set.seed(1)
 
 ## Compute K-means clusters
 
@@ -435,7 +432,6 @@ acc_rf <- mean(pred_rf==info_samples$Group)
 # table(pred_rf, yTest)
 
 ## AUC from ROC curve
-# roc_rf <- roc(yTrain, rf$votes[,2])
 prob_rf <- predict(rf, t(test_data), type = "prob")
 roc_rf <- roc(yTest, prob_rf$normal)
 # plot(roc_rf)
@@ -493,7 +489,7 @@ res_df["LDA"] <- c(acc_lda, auc_lda)
 ```
 
 
-# Lasso and Ridge regression (week 7)
+# Lasso regression (week 7)
 
 ```{r lasso}
 set.seed(1)
@@ -532,6 +528,7 @@ This method compares signatures of different individuals. Each signature is sort
 
 
 ```{r scudo}
+set.seed(1)
 ## Apply SCUDO on the training set
 
 scudo_train <- scudoTrain(train_data, groups = yTrain,
@@ -578,13 +575,15 @@ The models fitted before are compared by accuracy and AUC. The random forest app
 res_plot <- data.frame(Model = rep(colnames(res_df),2),
                        Metric = rep(c("Accuracy", "AUC"), each=ncol(res_df)),
                        Value=c(as.numeric(res_df[1,]), as.numeric(res_df[2,])))
-res_plot
-
+res_plot["Labels"] <- sprintf("%.2f", res_plot$Value)
+# res_plot
 
 ggplot(res_plot, aes(x=Model, y=Value, fill=Metric))+
-  geom_bar(stat="identity", position="dodge", width=0.5)+
+  geom_bar(stat="identity", position="dodge", width=0.7)+
   scale_fill_manual(values = c(my_colors[c(4,6)]))+
-  ggtitle("Models evaluation")
+  ggtitle("Models evaluation")+
+  geom_text(aes(label=Labels), vjust=1.6, color="white",
+            position = position_dodge(0.7), size=3.5)
 
 ```
 
@@ -612,19 +611,14 @@ head(imp)
 imp25 <- imp$gene[1:25]
 imp25_data <- clean_data[is.element(rownames(clean_data), imp25),]
 
-div <- c("#2e005d", "#662a71", "#945789", "#bc87a5", "#debbc8", 
-        "#fcf1f3", "#ffd2d8", "#ffb2b4", "#ff9486", "#ff7852", "#ff6200")
-# hmcol <- rev(colorRampPalette(brewer.pal(11,"RdBu"))(256))
 hmcol <- viridis(1000, option="mako")
-# colnames(imp25_data) <- korTable$Group # This will label the heatmap columns
 csc <- rep(my_colors[3],ncol(imp25_data))
 csc[info_samples$Group=='tumor'] <- my_colors[5]
-# column side color will be purple for T and orange for B
 imp25_data <- as.matrix(imp25_data)
 heatmap(imp25_data, scale="row", col=hmcol, ColSideColors=csc,
         # main = "25 most important genes", 
         labCol = FALSE)
-legend(x=0.72, y=1, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
+legend(x=0.78, y=1.07, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
 
 ```
 
@@ -658,7 +652,7 @@ publish_gostplot(p, filename = NULL)
 
 publish_gosttable(gost_res, highlight_terms = gost_df$term_id[1:10],
                   use_colors = TRUE, filename = NULL,
-                  show_columns = c("source","term_id", "term_name", "p_value"))
+                  show_columns = c("term_id", "term_name", "p_value"))
 
 ```
 
@@ -691,12 +685,11 @@ rm(a)
 ```
 
 
-```{r net}
+```{r net, echo=TRUE, results='hide'}
 net_KEGG <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           iterations = 1, # keeps running time low - default is 10
                           gene_sets = "KEGG", 
                           visualize_enriched_terms = FALSE,
-                          # output_dir = NULL,
                           silent_option = FALSE)
 
 # ## cluster enriched terms
@@ -708,14 +701,12 @@ net_GO <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           iterations = 1, # keeps running time low - default is 10
                           gene_sets = "GO-All", 
                           visualize_enriched_terms = FALSE,
-                          # output_dir = NULL,
                           silent_option = FALSE)
 
 net_Reactome <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           iterations = 1, # keeps running time low - default is 10
                           gene_sets = "Reactome", 
                           visualize_enriched_terms = FALSE,
-                          # output_dir = NULL,
                           silent_option = FALSE)
 ```
 

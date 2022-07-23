@@ -13,8 +13,7 @@ Network-based Data Analysis Project
   - [Random Forests (week 5)](#random-forests-week-5)
   - [Linear Discriminant Analysis (week
     6)](#linear-discriminant-analysis-week-6)
-  - [Lasso and Ridge regression (week
-    7)](#lasso-and-ridge-regression-week-7)
+  - [Lasso regression (week 7)](#lasso-regression-week-7)
   - [Scudo (week 8)](#scudo-week-8)
   - [Models comparison](#models-comparison)
   - [Feature selection](#feature-selection)
@@ -145,11 +144,6 @@ dim(filter_data)
 ```
 
     ## [1] 53488    68
-
-``` r
-# boxplot(filter_data, main = "Boxplot", xlab = "Samples", ylab = "Counts",
-#         xaxt = "n", col = my_colors[7])
-```
 
 ## Normalization
 
@@ -304,6 +298,8 @@ patients (normal and tumor). The results are plotted with a pca for a
 better visualization.
 
 ``` r
+set.seed(1)
+
 ## Compute K-means clusters
 
 K=2
@@ -500,7 +496,6 @@ acc_rf <- mean(pred_rf==info_samples$Group)
 # table(pred_rf, yTest)
 
 ## AUC from ROC curve
-# roc_rf <- roc(yTrain, rf$votes[,2])
 prob_rf <- predict(rf, t(test_data), type = "prob")
 roc_rf <- roc(yTest, prob_rf$normal)
 # plot(roc_rf)
@@ -558,7 +553,7 @@ auc_lda <- auc(roc_lda)
 res_df["LDA"] <- c(acc_lda, auc_lda)
 ```
 
-# Lasso and Ridge regression (week 7)
+# Lasso regression (week 7)
 
 ``` r
 set.seed(1)
@@ -600,6 +595,7 @@ compared and a map is constructed, where clusters can be seen if they
 are colsely connected.
 
 ``` r
+set.seed(1)
 ## Apply SCUDO on the training set
 
 scudo_train <- scudoTrain(train_data, groups = yTrain,
@@ -669,28 +665,15 @@ metrics.
 res_plot <- data.frame(Model = rep(colnames(res_df),2),
                        Metric = rep(c("Accuracy", "AUC"), each=ncol(res_df)),
                        Value=c(as.numeric(res_df[1,]), as.numeric(res_df[2,])))
-res_plot
-```
+res_plot["Labels"] <- sprintf("%.2f", res_plot$Value)
+# res_plot
 
-    ##           Model   Metric     Value
-    ## 1        Kmeans Accuracy 0.1470588
-    ## 2  Hierarchical Accuracy 0.7647059
-    ## 3  RandomForest Accuracy 0.9705882
-    ## 4           LDA Accuracy 0.9500000
-    ## 5         Lasso Accuracy 0.9500000
-    ## 6         Scudo Accuracy 0.9000000
-    ## 7        Kmeans      AUC 0.8642857
-    ## 8  Hierarchical      AUC 0.7897727
-    ## 9  RandomForest      AUC 0.9800000
-    ## 10          LDA      AUC 0.9545455
-    ## 11        Lasso      AUC 0.9545455
-    ## 12        Scudo      AUC 0.8800000
-
-``` r
 ggplot(res_plot, aes(x=Model, y=Value, fill=Metric))+
-  geom_bar(stat="identity", position="dodge", width=0.5)+
+  geom_bar(stat="identity", position="dodge", width=0.7)+
   scale_fill_manual(values = c(my_colors[c(4,6)]))+
-  ggtitle("Models evaluation")
+  ggtitle("Models evaluation")+
+  geom_text(aes(label=Labels), vjust=1.6, color="white",
+            position = position_dodge(0.7), size=3.5)
 ```
 
 ![](Network-basedDA_files/figure-gfm/res-1.png)<!-- -->
@@ -729,19 +712,14 @@ head(imp)
 imp25 <- imp$gene[1:25]
 imp25_data <- clean_data[is.element(rownames(clean_data), imp25),]
 
-div <- c("#2e005d", "#662a71", "#945789", "#bc87a5", "#debbc8", 
-        "#fcf1f3", "#ffd2d8", "#ffb2b4", "#ff9486", "#ff7852", "#ff6200")
-# hmcol <- rev(colorRampPalette(brewer.pal(11,"RdBu"))(256))
 hmcol <- viridis(1000, option="mako")
-# colnames(imp25_data) <- korTable$Group # This will label the heatmap columns
 csc <- rep(my_colors[3],ncol(imp25_data))
 csc[info_samples$Group=='tumor'] <- my_colors[5]
-# column side color will be purple for T and orange for B
 imp25_data <- as.matrix(imp25_data)
 heatmap(imp25_data, scale="row", col=hmcol, ColSideColors=csc,
         # main = "25 most important genes", 
         labCol = FALSE)
-legend(x=0.72, y=1, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
+legend(x=0.78, y=1.07, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
 ```
 
 ![](Network-basedDA_files/figure-gfm/heatmap-1.png)<!-- -->
@@ -781,7 +759,7 @@ publish_gostplot(p, filename = NULL)
 ``` r
 publish_gosttable(gost_res, highlight_terms = gost_df$term_id[1:10],
                   use_colors = TRUE, filename = NULL,
-                  show_columns = c("source","term_id", "term_name", "p_value"))
+                  show_columns = c("term_id", "term_name", "p_value"))
 ```
 
 ![](Network-basedDA_files/figure-gfm/functional-2.png)<!-- -->
@@ -821,70 +799,8 @@ net_KEGG <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           iterations = 1, # keeps running time low - default is 10
                           gene_sets = "KEGG", 
                           visualize_enriched_terms = FALSE,
-                          # output_dir = NULL,
                           silent_option = FALSE)
-```
 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |.......................                                               |  33%
-    ##    inline R code fragments
-    ## 
-    ##   |                                                                              |...............................................                       |  67%
-    ## label: setup (with options) 
-    ## List of 1
-    ##  $ include: logi FALSE
-    ## 
-    ##   |                                                                              |......................................................................| 100%
-    ##   ordinary text without R code
-    ## 
-    ## 
-    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS results.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a11d560b6.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a5afedae6.html 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |..................                                                    |  25%
-    ##    inline R code fragments
-    ## 
-    ##   |                                                                              |...................................                                   |  50%
-    ## label: setup (with options) 
-    ## List of 1
-    ##  $ include: logi FALSE
-    ## 
-    ##   |                                                                              |....................................................                  |  75%
-    ##   ordinary text without R code
-    ## 
-    ##   |                                                                              |......................................................................| 100%
-    ## label: table (with options) 
-    ## List of 2
-    ##  $ echo   : logi FALSE
-    ##  $ comment: logi NA
-    ## 
-    ## 
-    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS enriched_terms.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a12664f1b.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a6a6ce1f3.html 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |............                                                          |  17%
-    ##    inline R code fragments
-    ## 
-    ##   |                                                                              |.......................                                               |  33%
-    ## label: setup (with options) 
-    ## List of 1
-    ##  $ include: logi FALSE
-    ## 
-    ##   |                                                                              |...................................                                   |  50%
-    ##   ordinary text without R code
-    ## 
-    ##   |                                                                              |...............................................                       |  67%
-    ## label: converted_tbl, table1 (with options) 
-    ## List of 1
-    ##  $ comment: logi NA
-    ## 
-    ##   |                                                                              |..........................................................            |  83%
-    ##   ordinary text without R code
-    ## 
-    ##   |                                                                              |......................................................................| 100%
-    ## label: gene_wo_interaction, table2 (with options) 
-    ## List of 1
-    ##  $ comment: logi NA
-    ## 
-    ## 
-    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS conversion_table.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a5478f847.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a6505a0b1.html
-
-``` r
 # ## cluster enriched terms
 # patR_clu <- cluster_enriched_terms(patR_res)
 # ## term-gene graph of top 10 terms
@@ -894,142 +810,20 @@ net_GO <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           iterations = 1, # keeps running time low - default is 10
                           gene_sets = "GO-All", 
                           visualize_enriched_terms = FALSE,
-                          # output_dir = NULL,
                           silent_option = FALSE)
 ```
 
 ![](Network-basedDA_files/figure-gfm/net-1.png)<!-- -->
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |.......................                                               |  33%
-    ##    inline R code fragments
-    ## 
-    ##   |                                                                              |...............................................                       |  67%
-    ## label: setup (with options) 
-    ## List of 1
-    ##  $ include: logi FALSE
-    ## 
-    ##   |                                                                              |......................................................................| 100%
-    ##   ordinary text without R code
-    ## 
-    ## 
-    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS results.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a3bef1969.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a74985104.html 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |..................                                                    |  25%
-    ##    inline R code fragments
-    ## 
-    ##   |                                                                              |...................................                                   |  50%
-    ## label: setup (with options) 
-    ## List of 1
-    ##  $ include: logi FALSE
-    ## 
-    ##   |                                                                              |....................................................                  |  75%
-    ##   ordinary text without R code
-    ## 
-    ##   |                                                                              |......................................................................| 100%
-    ## label: table (with options) 
-    ## List of 2
-    ##  $ echo   : logi FALSE
-    ##  $ comment: logi NA
-    ## 
-    ## 
-    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS enriched_terms.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a67253489.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a2a1769d5.html 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |............                                                          |  17%
-    ##    inline R code fragments
-    ## 
-    ##   |                                                                              |.......................                                               |  33%
-    ## label: setup (with options) 
-    ## List of 1
-    ##  $ include: logi FALSE
-    ## 
-    ##   |                                                                              |...................................                                   |  50%
-    ##   ordinary text without R code
-    ## 
-    ##   |                                                                              |...............................................                       |  67%
-    ## label: converted_tbl, table1 (with options) 
-    ## List of 1
-    ##  $ comment: logi NA
-    ## 
-    ##   |                                                                              |..........................................................            |  83%
-    ##   ordinary text without R code
-    ## 
-    ##   |                                                                              |......................................................................| 100%
-    ## label: gene_wo_interaction, table2 (with options) 
-    ## List of 1
-    ##  $ comment: logi NA
-    ## 
-    ## 
-    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS conversion_table.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a229f7099.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a8bccab2.html
 
 ``` r
 net_Reactome <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           iterations = 1, # keeps running time low - default is 10
                           gene_sets = "Reactome", 
                           visualize_enriched_terms = FALSE,
-                          # output_dir = NULL,
                           silent_option = FALSE)
 ```
 
-![](Network-basedDA_files/figure-gfm/net-2.png)<!-- -->
-
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |.......................                                               |  33%
-    ##    inline R code fragments
-    ## 
-    ##   |                                                                              |...............................................                       |  67%
-    ## label: setup (with options) 
-    ## List of 1
-    ##  $ include: logi FALSE
-    ## 
-    ##   |                                                                              |......................................................................| 100%
-    ##   ordinary text without R code
-    ## 
-    ## 
-    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS results.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a705580d7.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a6c0f8a9d.html 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |..................                                                    |  25%
-    ##    inline R code fragments
-    ## 
-    ##   |                                                                              |...................................                                   |  50%
-    ## label: setup (with options) 
-    ## List of 1
-    ##  $ include: logi FALSE
-    ## 
-    ##   |                                                                              |....................................................                  |  75%
-    ##   ordinary text without R code
-    ## 
-    ##   |                                                                              |......................................................................| 100%
-    ## label: table (with options) 
-    ## List of 2
-    ##  $ echo   : logi FALSE
-    ##  $ comment: logi NA
-    ## 
-    ## 
-    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS enriched_terms.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a7199d93c.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a399cfcd0.html 
-    ##   |                                                                              |                                                                      |   0%  |                                                                              |............                                                          |  17%
-    ##    inline R code fragments
-    ## 
-    ##   |                                                                              |.......................                                               |  33%
-    ## label: setup (with options) 
-    ## List of 1
-    ##  $ include: logi FALSE
-    ## 
-    ##   |                                                                              |...................................                                   |  50%
-    ##   ordinary text without R code
-    ## 
-    ##   |                                                                              |...............................................                       |  67%
-    ## label: converted_tbl, table1 (with options) 
-    ## List of 1
-    ##  $ comment: logi NA
-    ## 
-    ##   |                                                                              |..........................................................            |  83%
-    ##   ordinary text without R code
-    ## 
-    ##   |                                                                              |......................................................................| 100%
-    ## label: gene_wo_interaction, table2 (with options) 
-    ## List of 1
-    ##  $ comment: logi NA
-    ## 
-    ## 
-    ## /Applications/RStudio.app/Contents/MacOS/pandoc/pandoc +RTS -K512m -RTS conversion_table.knit.md --to html4 --from markdown+autolink_bare_uris+tex_math_single_backslash --output pandoc56a6b6c0fa2.html --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/pagebreak.lua --lua-filter /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmarkdown/lua/latex-div.lua --self-contained --variable bs3=TRUE --standalone --section-divs --template /Library/Frameworks/R.framework/Versions/4.1/Resources/library/rmarkdown/rmd/h/default.html --no-highlight --variable highlightjs=1 --variable theme=bootstrap --mathjax --variable 'mathjax-url=https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML' --include-in-header /var/folders/qz/jphp3gs14hld_63jr0vtf7400000gn/T//RtmpMuWKvG/rmarkdown-str56a3cf2d8a0.html
-
-![](Network-basedDA_files/figure-gfm/net-3.png)<!-- -->
+![](Network-basedDA_files/figure-gfm/net-2.png)<!-- -->![](Network-basedDA_files/figure-gfm/net-3.png)<!-- -->
 
 ``` r
 enrichment_chart(net_KEGG)
