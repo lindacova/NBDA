@@ -711,9 +711,9 @@ net_Reactome <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
 ```
 
 ```{r net_plot}
-# enrichment_chart(net_KEGG)
-# enrichment_chart(net_GO)
-# enrichment_chart(net_Reactome)
+enrichment_chart(net_KEGG)
+enrichment_chart(net_GO)
+enrichment_chart(net_Reactome)
 ```
 
 ```{r reactome}

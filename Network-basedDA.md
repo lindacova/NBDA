@@ -813,8 +813,6 @@ net_GO <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           silent_option = FALSE)
 ```
 
-![](Network-basedDA_files/figure-gfm/net-1.png)<!-- -->
-
 ``` r
 net_Reactome <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           iterations = 1, # keeps running time low - default is 10
@@ -822,8 +820,6 @@ net_Reactome <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           visualize_enriched_terms = FALSE,
                           silent_option = FALSE)
 ```
-
-![](Network-basedDA_files/figure-gfm/net-2.png)<!-- -->![](Network-basedDA_files/figure-gfm/net-3.png)<!-- -->
 
 ``` r
 enrichment_chart(net_KEGG)
