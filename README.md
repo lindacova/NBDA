@@ -3,4 +3,4 @@ a.a. 2021/2022 - Prof. Lauria
 
 ***
 
-Analysis of high-throughput biological data
+Analysis of a gene expression dataset: preprocessing, fitting of multiple classification models, functional enrichment analysis and network-based analysis of the most influential features.
