@@ -685,7 +685,7 @@ rm(a)
 ```
 
 
-```{r net, echo=TRUE, results='hide'}
+```{r net, echo=TRUE, results='hide', fig.show='hide'}
 net_KEGG <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           iterations = 1, # keeps running time low - default is 10
                           gene_sets = "KEGG", 
@@ -711,12 +711,14 @@ net_Reactome <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
 ```
 
 ```{r net_plot}
-enrichment_chart(net_KEGG)
-enrichment_chart(net_GO)
-enrichment_chart(net_Reactome)
+# enrichment_chart(net_KEGG)
+# enrichment_chart(net_GO)
+# enrichment_chart(net_Reactome)
 ```
 
 ```{r reactome}
 term_gene_graph(net_Reactome, num_terms = 7, use_description = TRUE)
 ```
+
+
 
