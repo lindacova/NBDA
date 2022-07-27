@@ -3,15 +3,15 @@ title: "Network-based Data Analysis Project"
 output:
   github_document:
     toc: true
-    # theme: yeti
-    # html_document:
-    #   df_print: paged
-    #   toc: yes
-    #   theme: yeti
+  # html_document:
+  #   df_print: paged
+  #   toc: yes
+  #   theme: yeti
 ---
 
 ```{r include=FALSE}
 knitr::opts_chunk$set(message = FALSE, warning = FALSE)
+# knitr::opts_chunk$set(cache = TRUE)
 ```
 
 ```{r packages, warning=FALSE, results='hide', message=FALSE}
@@ -87,6 +87,18 @@ The metadata table is available ![online](https://www.refine.bio/experiments/SRP
 info_samples <- read.csv(file = "korTable.csv", header = 1, stringsAsFactors = TRUE, row.names = 1)
 # sort korTable rows to be in the same order as full_data columns
 info_samples <- info_samples[colnames(full_data),] 
+```
+
+"Perfectly balanced, as all things should be"
+
+```{r metadata_2, fig.show="hold", out.width="50%"}
+ggplot(info_samples, aes(x=Group, fill=Sex))+
+  geom_bar()+
+  scale_fill_manual(values = my_colors[c(6,7)])
+
+ggplot(info_samples, aes(x=Group, y=Age, fill=Group))+
+  geom_boxplot()+
+  scale_fill_manual(values = my_colors[c(3,4)])
 ```
 
 
@@ -403,7 +415,7 @@ rf_gridsearch <- train(x=t(train_data), y=yTrain,
 mtry <- rf_gridsearch$bestTune$mtry
 ```
 
-The best mtry results to be 251.2747. Next, a model is built on the training set with these parameters and evaluated on the test set.
+The best mtry results to be 281.2747. Next, a model is built on the training set with these parameters and evaluated on the test set.
 
 ```{r rf}
 set.seed(1)
@@ -486,6 +498,8 @@ auc_lda <- auc(roc_lda)
 
 ## Update results table
 res_df["LDA"] <- c(acc_lda, auc_lda)
+
+# print(lda_fit)
 ```
 
 
@@ -501,9 +515,9 @@ tunegrid <- expand.grid(alpha=1,
 lasso_fit <- train(t(train_data), yTrain, method="glmnet", family="binomial", 
                  tuneGrid = tunegrid,
                  metric="Accuracy", trControl=control)
-# print(lasso_fit)
+print(lasso_fit)
 
-## Apply it on the test set
+# Apply it on the test set
 pred_lasso <- predict(lasso_fit, t(test_data))
 
 ## Accuracy
@@ -618,7 +632,8 @@ imp25_data <- as.matrix(imp25_data)
 heatmap(imp25_data, scale="row", col=hmcol, ColSideColors=csc,
         # main = "25 most important genes", 
         labCol = FALSE)
-legend(x=0.78, y=1.07, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
+# legend(x=0.7, y=1.07, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
+legend(x=0.73, y=1, legend=c("normal", "tumor"), fill=my_colors[c(3,5)])
 
 ```
 
@@ -692,11 +707,6 @@ net_KEGG <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           visualize_enriched_terms = FALSE,
                           silent_option = FALSE)
 
-# ## cluster enriched terms
-# patR_clu <- cluster_enriched_terms(patR_res)
-# ## term-gene graph of top 10 terms
-# term_gene_graph(patR_res)
-
 net_GO <- run_pathfindR(geneList_tt[c("SYMBOL", "p.value")],
                           iterations = 1, # keeps running time low - default is 10
                           gene_sets = "GO-All", 
@@ -720,5 +730,9 @@ enrichment_chart(net_Reactome)
 term_gene_graph(net_Reactome, num_terms = 7, use_description = TRUE)
 ```
 
+```{r cluster_reactome}
+## cluster enriched terms
+cluster_enriched_terms(net_Reactome)
+```
 
 
